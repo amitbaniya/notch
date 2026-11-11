@@ -167,7 +167,7 @@ mod audio {
     use windows::core::Result;
     use windows::Win32::Media::Audio::{eConsole, Endpoints::{IAudioEndpointVolume, IAudioMeterInformation}, EDataFlow, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator};
     use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
-    fn dev(flow: EDataFlow) -> Result<IMMDevice> {
+    pub fn dev(flow: EDataFlow) -> Result<IMMDevice> {
         unsafe {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             let e: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
@@ -412,43 +412,145 @@ fn toast_texts(xml: &str) -> Vec<String> {
     v
 }
 
-// Bubble column at the bottom-right. The window stays "shown" and is parked off-screen when empty,
-// so it never steals keyboard focus from whatever you're typing in.
-#[tauri::command]
-async fn set_bubbles(app: tauri::AppHandle, n: u32) {
-    let Some(w) = app.get_webview_window("bubbles") else { return };
-    if n == 0 { let _ = w.set_position(PhysicalPosition::new(-10000, -10000)); return; }
-    let h = n.min(4) as f64 * 66.0 + 24.0;
-    let _ = w.set_size(tauri::LogicalSize::new(84.0, h));
-    if let Ok(Some(mon)) = w.primary_monitor() {
-        let sf = mon.scale_factor();
-        let x = mon.position().x as f64 + mon.size().width as f64 - (84.0 + 12.0) * sf;
-        let y = mon.position().y as f64 + mon.size().height as f64 - (h + 64.0) * sf; // 64px clears a bottom taskbar
-        let _ = w.set_position(PhysicalPosition::new(x as i32, y as i32));
+#[cfg(windows)]
+use windows::core::Interface;
+#[cfg(windows)]
+use windows::Win32::Media::Audio::ISimpleAudioVolume;
+
+#[cfg(windows)]
+fn proc_name(pid: u32) -> String {
+    use windows::core::PWSTR;
+    use windows::Win32::{Foundation::CloseHandle, System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION}};
+    unsafe {
+        let Ok(h) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else { return String::new() };
+        let mut buf = [0u16; 520];
+        let mut n = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut n);
+        let _ = CloseHandle(h);
+        if ok.is_err() { return String::new(); }
+        let p = String::from_utf16_lossy(&buf[..n as usize]);
+        std::path::Path::new(&p).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
     }
 }
 
-// Quick chat: a compact always-on-top window with the service's web client (stays signed in).
-#[tauri::command]
-async fn open_chat(app: tauri::AppHandle, service: String) {
-    let (label, url) = match service.as_str() {
-        "WhatsApp" => ("chat-whatsapp", "https://web.whatsapp.com"),
-        "Instagram" => ("chat-instagram", "https://www.instagram.com/direct/inbox/"),
-        "Messenger" => ("chat-messenger", "https://www.messenger.com"),
-        "Telegram" => ("chat-telegram", "https://web.telegram.org/a/"),
-        "Discord" => ("chat-discord", "https://discord.com/channels/@me"),
-        _ => return,
-    };
-    if let Some(w) = app.get_webview_window(label) { let _ = w.show(); let _ = w.set_focus(); return; }
-    let (mut x, mut y) = (100.0, 100.0);
-    if let Ok(Some(mon)) = app.primary_monitor() {
-        let sf = mon.scale_factor();
-        x = mon.position().x as f64 / sf + mon.size().width as f64 / sf - 420.0 - 110.0;
-        y = mon.position().y as f64 / sf + mon.size().height as f64 / sf - 640.0 - 64.0;
+// Calls f for every audio session (one per app/stream) on the default speakers.
+#[cfg(windows)]
+fn each_session(mut f: impl FnMut(u32, &ISimpleAudioVolume)) -> windows::core::Result<()> {
+    use windows::Win32::Media::Audio::{eRender, IAudioSessionControl2, IAudioSessionManager2};
+    use windows::Win32::System::Com::CLSCTX_ALL;
+    unsafe {
+        let m = audio::dev(eRender)?.Activate::<IAudioSessionManager2>(CLSCTX_ALL, None)?;
+        let e = m.GetSessionEnumerator()?;
+        for i in 0..e.GetCount()? {
+            let c = e.GetSession(i)?;
+            let pid = c.cast::<IAudioSessionControl2>()?.GetProcessId()?;
+            let v = c.cast::<ISimpleAudioVolume>()?;
+            f(pid, &v);
+        }
     }
-    let Ok(u) = url.parse::<tauri::Url>() else { return };
-    let _ = tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::External(u))
-        .title(service).inner_size(420.0, 640.0).position(x.max(0.0), y.max(0.0)).always_on_top(true).build();
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct Sess { pid: u32, name: String, vol: f32, mute: bool }
+
+#[tauri::command]
+async fn get_sessions() -> Vec<Sess> {
+    #[cfg(windows)]
+    {
+        let mut out: Vec<Sess> = Vec::new();
+        let _ = each_session(|pid, v| {
+            if out.iter().any(|s| s.pid == pid) { return; }
+            let name = if pid == 0 { "System sounds".to_string() } else { proc_name(pid) };
+            if name.is_empty() { return; }
+            let vol = unsafe { v.GetMasterVolume() }.unwrap_or(1.0);
+            let mute = unsafe { v.GetMute() }.map(|b| b.as_bool()).unwrap_or(false);
+            out.push(Sess { pid, name, vol, mute });
+        });
+        out.sort_by_key(|s| s.name.to_lowercase());
+        return out;
+    }
+    #[cfg(not(windows))]
+    Vec::new()
+}
+
+#[tauri::command]
+async fn set_app_volume(pid: u32, v: f32) {
+    #[cfg(windows)]
+    { let _ = each_session(|p, s| if p == pid { unsafe { let _ = s.SetMasterVolume(v.clamp(0.0, 1.0), std::ptr::null()); } }); }
+    #[cfg(not(windows))]
+    let _ = (pid, v);
+}
+
+#[tauri::command]
+async fn set_app_mute(pid: u32, m: bool) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::BOOL;
+        let _ = each_session(|p, s| if p == pid { unsafe { let _ = s.SetMute(BOOL::from(m), std::ptr::null()); } });
+    }
+    #[cfg(not(windows))]
+    let _ = (pid, m);
+}
+
+// True when the foreground window covers its whole monitor and isn't the desktop, a browser or a video player.
+#[cfg(windows)]
+fn fullscreen_game() -> bool {
+    use windows::Win32::{Foundation::RECT, Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST},
+        UI::WindowsAndMessaging::{GetClassNameW, GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId}};
+    unsafe {
+        let h = GetForegroundWindow();
+        if h.is_invalid() { return false; }
+        let mut r = RECT::default();
+        if GetWindowRect(h, &mut r).is_err() { return false; }
+        let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+        if !GetMonitorInfoW(MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), &mut mi).as_bool() { return false; }
+        let m = mi.rcMonitor;
+        if !(r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom) { return false; }
+        let mut cls = [0u16; 64];
+        let n = GetClassNameW(h, &mut cls).max(0) as usize;
+        let c = String::from_utf16_lossy(&cls[..n]);
+        if c == "Progman" || c == "WorkerW" || c == "Shell_TrayWnd" { return false; }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(h, Some(&mut pid as *mut u32));
+        let name = proc_name(pid).to_lowercase();
+        !["chrome", "msedge", "firefox", "brave", "opera", "vlc", "mpv", "explorer", "notch", "applicationframehost", "code"].contains(&name.as_str())
+    }
+}
+
+struct HudWant(Arc<AtomicBool>);
+#[tauri::command]
+fn set_hud_want(s: State<HudWant>, v: bool) { s.0.store(v, Ordering::Relaxed); }
+
+#[derive(Serialize, Clone)]
+struct Stats { cpu: f32, ram: f32, net: f32, gpu: Option<f32>, gpu_t: Option<f32>, fps: Option<f32> }
+
+// Every second: tell the UI whether a game is fullscreen; while the gaming bar is shown, also send stats.
+// GPU numbers come from nvidia-smi (NVIDIA only). FPS isn't available yet.
+fn stats_loop(app: tauri::AppHandle, want: Arc<AtomicBool>) {
+    #[cfg(windows)]
+    {
+        let mut sys = sysinfo::System::new();
+        let (mut last_rx, mut last_g) = (0u64, false);
+        loop {
+            std::thread::sleep(Duration::from_secs(1));
+            let g = fullscreen_game();
+            if g != last_g { last_g = g; let _ = app.emit("gaming", g); }
+            if !want.load(Ordering::Relaxed) { last_rx = 0; continue; }
+            sys.refresh_cpu_usage();
+            sys.refresh_memory();
+            let ram = if sys.total_memory() > 0 { sys.used_memory() as f32 / sys.total_memory() as f32 * 100.0 } else { 0.0 };
+            let rx: u64 = sysinfo::Networks::new_with_refreshed_list().iter().map(|(_, d)| d.total_received()).sum();
+            let net = if last_rx > 0 { rx.saturating_sub(last_rx) as f32 * 8.0 / 1e6 } else { 0.0 };
+            last_rx = rx;
+            let o = run("nvidia-smi", &["--query-gpu=utilization.gpu,temperature.gpu", "--format=csv,noheader,nounits"]);
+            let mut p = o.split(',').map(|x| x.trim().parse::<f32>().ok());
+            let (gpu, gpu_t) = (p.next().flatten(), p.next().flatten());
+            let _ = app.emit("stats", Stats { cpu: sys.global_cpu_usage(), ram, net, gpu, gpu_t, fps: None });
+        }
+    }
+    #[cfg(not(windows))]
+    { let _ = (app, want); }
 }
 
 fn main() {
@@ -456,7 +558,8 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Expanded(Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(280)), Arc::new(AtomicU32::new(0))))
         .manage(Arc::new(Share::default()))
-        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, set_bubbles, open_chat])
+        .manage(HudWant(Arc::new(AtomicBool::new(false))))
+        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, get_sessions, set_app_volume, set_app_mute, set_hud_want])
         .setup(|app| {
             let win = app.get_webview_window("main").unwrap();
             if let Ok(Some(mon)) = win.primary_monitor() {
@@ -487,6 +590,8 @@ fn main() {
                     }
                 }
             });
+            let (h2, want) = (app.handle().clone(), app.state::<HudWant>().0.clone());
+            std::thread::spawn(move || stats_loop(h2, want));
             Ok(())
         })
         .run(tauri::generate_context!())

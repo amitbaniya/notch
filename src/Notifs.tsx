@@ -19,7 +19,7 @@ export function useNotifs(active: boolean, ms: number) {
 const SERVICES: [RegExp, string][] = [[/whatsapp/i, "WhatsApp"], [/instagram/i, "Instagram"], [/messenger/i, "Messenger"], [/telegram/i, "Telegram"], [/discord/i, "Discord"]];
 export const service = (n: Notif) => SERVICES.find(([r]) => r.test(`${n.app} ${n.title} ${n.body}`))?.[1] ?? "";
 export const isChat = (n: Notif) => !!service(n);
-const appName = (raw: string) => {
+export const appName = (raw: string) => {
   const last = raw.split("!")[0].replace(/\.exe$/i, "").split("_")[0].split(".").filter(Boolean).pop() || raw;
   return last.charAt(0).toUpperCase() + last.slice(1);
 };
@@ -50,30 +50,6 @@ export function Notifications() {
     <div className="nf">
       <div className="nfl">{list.map((n) => <Row key={n.id} label={service(n) || appName(n.app)} title={n.title} body={n.body} at={n.at} unread={n.at > seen.current} />)}</div>
       <div className="nff"><span>{list.length} notification{list.length === 1 ? "" : "s"}</span><button onClick={() => { const t = Date.now(); setCleared(t); lsSet("notif_cleared", t); }}>Clear all</button></div>
-    </div>
-  );
-}
-
-export function ChatView({ on, setOn, items }: { on: boolean; setOn: (b: boolean) => void; items: Notif[] }) {
-  if (!on) return (
-    <div className="chatbox">
-      <div className="card2">Chat overlay is stopped. Start it to show WhatsApp, Instagram, Messenger, Telegram and Discord messages as they arrive.</div>
-      <button className="pill" onClick={() => setOn(true)}>▷ Start</button>
-    </div>
-  );
-  const groups = new Map<string, { n: Notif; count: number }>();
-  for (const n of items.filter(isChat)) { // items are newest first
-    const k = `${service(n)}|${n.title}`; const g = groups.get(k);
-    if (g) g.count++; else groups.set(k, { n, count: 1 });
-  }
-  const list = [...groups.values()];
-  return (
-    <div className="nf">
-      <div className="nfl">
-        {list.length ? list.map(({ n, count }) => <Row key={n.id} label={service(n)} title={n.title} body={n.body} at={n.at} extra={count > 1 ? `×${count}` : ""} onClick={() => invoke("open_chat", { service: service(n) })} />)
-          : <div className="empty">Running. New chat messages will show up here.</div>}
-      </div>
-      <div className="nff"><span>Chat overlay is running</span><button onClick={() => setOn(false)}>Stop</button></div>
     </div>
   );
 }

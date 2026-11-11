@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAudio } from "./Call";
+import { useAudio, useLive } from "./Audio";
+import { I } from "./icons";
 
 type Radios = { wifi: boolean | null; bt: boolean | null };
 const MODES = [["battery", "Battery"], ["balanced", "Balanced"], ["perf", "Performance"]] as const;
@@ -18,23 +19,7 @@ function VSlider({ v, set, commit, icon, off }: { v: number; set: (n: number) =>
   );
 }
 
-// Sends the latest slider value while dragging, never queueing more than one call at a time.
-function useLive(cmd: string, map: (n: number) => Record<string, number>) {
-  const busy = useRef(false), pending = useRef<number | null>(null);
-  return (n: number) => {
-    pending.current = n;
-    if (busy.current) return;
-    busy.current = true;
-    const go = () => {
-      const v = pending.current; pending.current = null;
-      if (v === null) { busy.current = false; return; }
-      invoke(cmd, map(v)).catch(() => {}).finally(go);
-    };
-    go();
-  };
-}
-
-const Tile = ({ icon, label, sub, on, click }: { icon: string; label: string; sub: string; on?: boolean; click?: () => void }) => (
+const Tile = ({ icon, label, sub, on, click }: { icon: ReactNode; label: string; sub: string; on?: boolean; click?: () => void }) => (
   <button className={"tl" + (on ? " on" : "")} onClick={click}><span className="tic">{icon}</span><b>{label}</b><small>{sub}</small></button>
 );
 
@@ -68,17 +53,17 @@ export function Controls() {
   return (
     <div className="controls">
       <div className="ctop">
-        <VSlider v={Math.max(br, 0)} off={br < 0} icon="☀" set={(n) => { setBr(n); liveBr(n); }} commit={(n) => liveBr(n)} />
-        <VSlider v={vol ?? 0} off={vol === null} icon={a?.out_mute ? "🔇" : "🔊"}
+        <VSlider v={Math.max(br, 0)} off={br < 0} icon={<I n="sun" />} set={(n) => { setBr(n); liveBr(n); }} commit={(n) => liveBr(n)} />
+        <VSlider v={vol ?? 0} off={vol === null} icon={<I n={a?.out_mute ? "volumeOff" : "volume"} />}
           set={(n) => { drag.current = true; setVol(n); liveVol(n); }} commit={(n) => { drag.current = false; liveVol(n); }} />
         <div className="tiles3">
-          <Tile icon="📶" label="Wi-Fi" sub={st(rad.wifi)} on={!!rad.wifi} click={() => radio(false)} />
-          <Tile icon="ᛒ" label="Bluetooth" sub={st(rad.bt)} on={!!rad.bt} click={() => radio(true)} />
-          <Tile icon="🌙" label="Night light" sub="Settings ›" click={() => open("ms-settings:nightlight")} />
-          <Tile icon="🔕" label="Focus" sub="Settings ›" click={() => open("ms-settings:quietmomentshome")} />
-          <Tile icon={a?.out_mute ? "🔇" : "🔈"} label="Mute" sub={a?.out_mute ? "Sound off" : "Sound on"} on={!!a?.out_mute}
+          <Tile icon={<I n="wifi" />} label="Wi-Fi" sub={st(rad.wifi)} on={!!rad.wifi} click={() => radio(false)} />
+          <Tile icon={<I n="bluetooth" />} label="Bluetooth" sub={st(rad.bt)} on={!!rad.bt} click={() => radio(true)} />
+          <Tile icon={<I n="moon" />} label="Night light" sub="Settings ›" click={() => open("ms-settings:nightlight")} />
+          <Tile icon={<I n="bellOff" />} label="Focus" sub="Settings ›" click={() => open("ms-settings:quietmomentshome")} />
+          <Tile icon={<I n={a?.out_mute ? "volumeOff" : "volume"} />} label="Mute" sub={a?.out_mute ? "Sound off" : "Sound on"} on={!!a?.out_mute}
             click={() => a && invoke("set_mute", { mic: false, m: !a.out_mute })} />
-          <Tile icon={bat?.charging ? "⚡" : "🔋"} label={bat ? `${bat.level}%` : "—"} sub={bat ? (bat.charging ? "Plugged in" : "On battery") : "No battery"} />
+          <Tile icon={<I n={bat?.charging ? "bolt" : "battery"} />} label={bat ? `${bat.level}%` : "—"} sub={bat ? (bat.charging ? "Plugged in" : "On battery") : "No battery"} />
         </div>
       </div>
       <div className="seg">{MODES.map(([k, l]) => (

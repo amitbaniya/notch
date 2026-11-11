@@ -23,22 +23,6 @@
         "resizable": false,
         "shadow": false,
         "focus": false
-      },
-      {
-        "label": "bubbles",
-        "title": "Notch bubbles",
-        "url": "index.html#bubbles",
-        "width": 84,
-        "height": 100,
-        "x": -10000,
-        "y": -10000,
-        "decorations": false,
-        "transparent": true,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "resizable": false,
-        "shadow": false,
-        "focus": false
       }
     ],
     "security": {

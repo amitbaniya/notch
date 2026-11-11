@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { I } from "./icons";
 import { readText, readImage, writeText } from "@tauri-apps/plugin-clipboard-manager";
 
 export type Clip = { id: number; kind: "text" | "link" | "image" | "file"; text?: string; thumb?: string; w?: number; h?: number; files?: string[]; at: number };
@@ -76,8 +77,8 @@ export function ClipView({ items, clear, snips, setSnips }: { items: Clip[]; cle
               <div className="cf">
                 <span className="sub">{c.w ? `${c.w} × ${c.h}` : c.text ? `${c.text.length} chars` : ""}</span>
                 {c.text && (f === "Snippets"
-                  ? <button onClick={(e) => { e.stopPropagation(); setSnips(snips.filter((s) => s.id !== c.id)); }}>✕</button>
-                  : <button onClick={(e) => { e.stopPropagation(); if (!snips.some((s) => s.text === c.text)) setSnips([{ ...c, id: Date.now() }, ...snips]); }}>☆</button>)}
+                  ? <button onClick={(e) => { e.stopPropagation(); setSnips(snips.filter((s) => s.id !== c.id)); }}><I n="x" s={14} /></button>
+                  : <button onClick={(e) => { e.stopPropagation(); if (!snips.some((s) => s.text === c.text)) setSnips([{ ...c, id: Date.now() }, ...snips]); }}><I n="star" s={14} /></button>)}
               </div>
             </div>
           ))}

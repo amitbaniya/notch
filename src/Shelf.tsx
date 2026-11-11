@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import QRCode from "qrcode";
+import { I, IconName } from "./icons";
 
 const base = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() || p;
-const icon = (p: string) => {
+const icon = (p: string): IconName => {
   const e = base(p).split(".").pop()?.toLowerCase() || "";
-  return /^(png|jpe?g|gif|webp|svg)$/.test(e) ? "🖼️" : /^(mp4|mov|mkv|webm)$/.test(e) ? "🎞️" : /^(mp3|wav|flac|m4a)$/.test(e) ? "🎵"
-    : e === "pdf" ? "📕" : /^(zip|rar|7z)$/.test(e) ? "🗜️" : "📄";
+  return /^(png|jpe?g|gif|webp|svg)$/.test(e) ? "image" : /^(mp4|mov|mkv|webm)$/.test(e) ? "video" : /^(mp3|wav|flac|m4a)$/.test(e) ? "music"
+    : /^(zip|rar|7z)$/.test(e) ? "archive" : "doc";
 };
 
 export function Shelf({ files, setFiles }: { files: string[]; setFiles: (f: string[]) => void }) {
@@ -22,8 +23,8 @@ export function Shelf({ files, setFiles }: { files: string[]; setFiles: (f: stri
       <div className="row">
         <span>Shelf <span className="sub">· {files.length} file{files.length === 1 ? "" : "s"}</span></span>
         <span className="chips">
-          {url ? <button className="on" onClick={stop}>Stop sharing</button> : <button className="on" disabled={!files.length} onClick={share}>📱 Send to phone</button>}
-          <button onClick={() => { setFiles([]); if (url) stop(); }} aria-label="Clear shelf">🗑</button>
+          {url ? <button className="on" onClick={stop}>Stop sharing</button> : <button className="on" disabled={!files.length} onClick={share}><I n="phone" s={16} /> Send to phone</button>}
+          <button onClick={() => { setFiles([]); if (url) stop(); }} aria-label="Clear shelf"><I n="trash" s={16} /></button>
         </span>
       </div>
       <div className="shbody">
@@ -31,7 +32,7 @@ export function Shelf({ files, setFiles }: { files: string[]; setFiles: (f: stri
           <div className="tiles">
             {files.map((p) => (
               <div key={p} className="tile" onClick={() => invoke("open_uri", { uri: p })} onContextMenu={(e) => { e.preventDefault(); setFiles(files.filter((x) => x !== p)); }} title="Click to open, right-click to remove">
-                <span className="ti">{icon(p)}</span><span className="tn">{base(p)}</span>
+                <span className="ti"><I n={icon(p)} s={42} /></span><span className="tn">{base(p)}</span>
               </div>
             ))}
           </div>

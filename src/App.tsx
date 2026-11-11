@@ -4,42 +4,26 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ClipView, useClipHistory, Clip } from "./Clip";
 import { Shelf } from "./Shelf";
-import { Call } from "./Call";
+import { AudioTab } from "./Audio";
+import { Controls } from "./Controls";
 import { Progress, Bar } from "./Progress";
 import { Settings } from "./Settings";
 import { Sites } from "./Sites";
-import { Notifications, ChatView, useNotifs, isChat } from "./Notifs";
+import { Notifications, useNotifs, hue, appName, Notif } from "./Notifs";
+import { I, IconName } from "./icons";
 import type { Cfg } from "./types";
-import { Controls } from "./Controls";
 
 type Media = { title: string; artist: string; playing: boolean; active: boolean; pos: number; dur: number };
-type Tab = "music" | "sites" | "notify" | "chat" | "shelf" | "clip" | "widgets" | "controls" | "tools" | "call" | "settings";
-type Item = { t: string; d: boolean };
+type Stats = { cpu: number; ram: number; net: number; gpu: number | null; gpu_t: number | null; fps: number | null };
+type Tab = "music" | "sites" | "notify" | "shelf" | "clip" | "controls" | "tools" | "audio" | "settings";
 
 const SPRING = { type: "spring", stiffness: 320, damping: 30, mass: 0.9 } as const;
-const ICONS: Record<Tab, string> = {
-  music: "M9 18V6l10-2v12M9 18a3 3 0 11-6 0 3 3 0 016 0zM19 16a3 3 0 11-6 0 3 3 0 016 0z",
-  sites: "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18",
-  notify: "M6 16v-5a6 6 0 0112 0v5l2 2H4zM10 20h4",
-  chat: "M4 5h16v11H9l-5 4z",
-  shelf: "M3 6h6l2 2h10v11H3z",
-  clip: "M8 4h8v3H8zM6 5h12v16H6z",
-  widgets: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
-  controls: "M4 7h10M18 7h2M4 17h2M10 17h10M14 5v4M6 15v4",
-  tools: "M6 6h.01M12 6h.01M18 6h.01M6 12h.01M12 12h.01M18 12h.01M6 18h.01M12 18h.01M18 18h.01",
-  call: "M4 14v-2a8 8 0 0116 0v2M4 14h3v5H4zM17 14h3v5h-3z",
-  settings: "M12 9a3 3 0 100 6 3 3 0 000-6zM12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1",
-};
-const TABS = Object.keys(ICONS) as Tab[];
-const SOON: Partial<Record<Tab, string>> = {
-};
+const TABS: [Tab, IconName][] = [["music", "music"], ["sites", "globe"], ["notify", "bell"], ["shelf", "folder"], ["clip", "clip"], ["controls", "sliders"], ["tools", "grid"], ["audio", "headphones"], ["settings", "gear"]];
+const GLASS = { glass: "58%", clear: "34%", solid: "96%" };
 
 const load = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 const mmss = (s: number) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.floor(Math.max(0, s) % 60)).padStart(2, "0")}`;
-const Icon = ({ d }: { d: string }) => (
-  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
-);
 const avgColor = (src: string) => new Promise<string>((res) => {
   const im = new Image();
   im.onload = () => {
@@ -55,8 +39,6 @@ const avgColor = (src: string) => new Promise<string>((res) => {
 function useSmoothPos(m: Media, at: number) {
   const base = useRef({ pos: 0, t: Date.now(), title: "", until: 0 });
   const [pos, setPos] = useState(0);
-  // Resync to the player's reported position only when it really differs (seek, new track, resume),
-  // so the 1s polling never makes the bar jump.
   useEffect(() => {
     const b = base.current, now = Date.now();
     if (now < b.until) return;
@@ -82,62 +64,15 @@ function Music({ m, at, art, bar }: { m: Media; at: number; art: string; bar: Ba
   const f = m.dur ? Math.min(1, pos / m.dur) : 0;
   return (
     <div className="music">
-      <div className="art">{art ? <img src={art} alt="" /> : <span>♪</span>}</div>
+      <div className="art">{art ? <img src={art} alt="" /> : <I n="music" s={38} />}</div>
       <div className="meta"><div className="title">{m.title || "Unknown"}</div><div className="sub">{m.artist || "Unknown artist"}</div></div>
       <div className="ctrls">
-        <button onClick={() => c("prev")} aria-label="Previous">⏮</button>
-        <button className="big" onClick={() => c("toggle")} aria-label="Play or pause">{m.playing ? "⏸" : "▶"}</button>
-        <button onClick={() => c("next")} aria-label="Next">⏭</button>
+        <button onClick={() => c("prev")} aria-label="Previous"><I n="prev" s={24} fill /></button>
+        <button className="big" onClick={() => c("toggle")} aria-label="Play or pause"><I n={m.playing ? "pause" : "play"} s={30} fill /></button>
+        <button onClick={() => c("next")} aria-label="Next"><I n="next" s={24} fill /></button>
       </div>
       <Progress kind={bar} frac={f} seed={m.title} onSeek={(x) => { if (m.dur) { jump(x * m.dur); c(`seek:${x * m.dur}`); } }} />
       <div className="times"><span>{mmss(pos)}</span><span>-{mmss(m.dur - pos)}</span></div>
-    </div>
-  );
-}
-
-const WX = (c: number) => (c === 0 ? ["☀️", "Clear"] : c < 4 ? ["⛅", "Cloudy"] : c < 50 ? ["🌫️", "Fog"] : c < 70 ? ["🌧️", "Rain"] : c < 80 ? ["❄️", "Snow"] : c < 90 ? ["🌦️", "Showers"] : ["⛈️", "Storm"]);
-
-function Widgets({ cfg }: { cfg: Cfg }) {
-  const [now, setNow] = useState(new Date());
-  const [items, setItems] = useState<Item[]>(() => load("todo", []));
-  const [v, setV] = useState("");
-  const [wx, setWx] = useState<{ t: number; c: number; hi: number; lo: number } | null>(null);
-  const [bat, setBat] = useState<{ level: number; charging: boolean } | null>(null);
-  useEffect(() => { const i = setInterval(() => setNow(new Date()), 10000); return () => clearInterval(i); }, []);
-  useEffect(() => save("todo", items), [items]);
-  useEffect(() => {
-    let dead = false;
-    const run = async () => {
-      try {
-        const g = await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cfg.city)}&count=1`)).json();
-        const p = g.results?.[0]; if (!p) return;
-        const w = await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto`)).json();
-        if (!dead) setWx({ t: w.current.temperature_2m, c: w.current.weather_code, hi: w.daily.temperature_2m_max[0], lo: w.daily.temperature_2m_min[0] });
-      } catch {}
-    };
-    run(); const i = setInterval(run, 900000); return () => { dead = true; clearInterval(i); };
-  }, [cfg.city]);
-  useEffect(() => {
-    (navigator as any).getBattery?.().then((b: any) => {
-      const u = () => setBat({ level: Math.round(b.level * 100), charging: b.charging });
-      u(); b.addEventListener("levelchange", u); b.addEventListener("chargingchange", u);
-    }).catch(() => {});
-  }, []);
-  let tzTime = "—"; try { tzTime = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: cfg.tz }); } catch {}
-  const [icon, label] = wx ? WX(wx.c) : ["", ""];
-  return (
-    <div className="grid">
-      <div className="card2"><div className="row"><span className="bigt">{now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span><span className="acc">{now.toLocaleDateString([], { weekday: "short" })}</span></div>
-        <div className="row sub"><span>{cfg.tz.split("/").pop()?.replace("_", " ")}</span><span>{tzTime}</span></div></div>
-      <div className="card2"><div className="row"><span>To do <b className="acc">{items.filter((i) => !i.d).length}</b></span></div>
-        <ul>{items.slice(0, 2).map((it, i) => (
-          <li key={i} className={it.d ? "done" : ""} onClick={() => setItems(items.map((x, j) => (j === i ? { ...x, d: !x.d } : x)))}
-            onContextMenu={(e) => { e.preventDefault(); setItems(items.filter((_, j) => j !== i)); }}><i />{it.t}</li>))}</ul>
-        <input value={v} placeholder="Add task" onChange={(e) => setV(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && v.trim()) { setItems([{ t: v.trim(), d: false }, ...items]); setV(""); } }} /></div>
-      <div className="card2 wx">{wx ? <><div className="row"><span className="bigt">{icon} {Math.round(wx.t)}°</span></div>
-        <div className="row sub"><span>{label} · {cfg.city}</span><span>H {Math.round(wx.hi)}° L {Math.round(wx.lo)}°</span></div></> : <div className="sub">Weather for {cfg.city}…</div>}</div>
-      <div className="card2"><div className="row"><span className="sub">This PC</span>{bat ? <><span className="bar"><i style={{ width: `${bat.level}%` }} /></span><b className="ok">{bat.level}%{bat.charging ? " ⚡" : ""}</b></> : <span className="sub">No battery</span>}</div></div>
     </div>
   );
 }
@@ -150,9 +85,9 @@ function Tools() {
   return (
     <div className="tools">
       <div className="trow">
-        <button onClick={() => open("ms-screenclip:")}>📷 Screenshot</button>
-        <button onClick={() => open("ms-screenclip:")}>✂️ Snip</button>
-        <button onClick={() => open("ms-gamebar:")}>🔴 Record</button>
+        <button onClick={() => open("ms-screenclip:")}><I n="camera" s={18} /> Screenshot</button>
+        <button onClick={() => open("ms-screenclip:")}><I n="scissors" s={18} /> Snip</button>
+        <button onClick={() => open("ms-gamebar:")}><span style={{ color: "#ff453a", display: "flex" }}><I n="record" s={18} fill /></span> Record</button>
       </div>
       <div className="slots">{slots.map((s, i) => edit === i ? (
         <input key={i} autoFocus value={v} placeholder="URL or app path" onChange={(e) => setV(e.target.value)} onBlur={() => setEdit(-1)}
@@ -160,7 +95,23 @@ function Tools() {
       ) : s ? (
         <button key={i} className="slot" onClick={() => open(s)} onContextMenu={(e) => { e.preventDefault(); set(i, ""); }} title="Right-click to remove">
           {s.replace(/^https?:\/\/(www\.)?/, "").split(/[\\/]/).filter(Boolean).pop()?.slice(0, 12)}</button>
-      ) : <button key={i} className="slot add" onClick={() => { setV(""); setEdit(i); }}>+<small>Add</small></button>)}</div>
+      ) : <button key={i} className="slot add" onClick={() => { setV(""); setEdit(i); }}><I n="plus" s={20} /><small>Add</small></button>)}</div>
+    </div>
+  );
+}
+
+function Hud({ s }: { s: Stats | null }) {
+  const [t, setT] = useState(new Date());
+  useEffect(() => { const i = setInterval(() => setT(new Date()), 1000); return () => clearInterval(i); }, []);
+  const item = (k: string, v: string) => <span className="hi"><b>{k}</b> {v}</span>;
+  return (
+    <div className="hud">
+      {s?.fps != null && item("FPS", String(Math.round(s.fps)))}
+      {item("CPU", s ? `${Math.round(s.cpu)}%` : "—")}
+      {item("GPU", s && s.gpu != null ? `${Math.round(s.gpu)}%${s.gpu_t != null ? ` ${Math.round(s.gpu_t)}°` : ""}` : "—")}
+      {item("RAM", s ? `${Math.round(s.ram)}%` : "—")}
+      <span className="hi"><I n="down" s={12} /> {s ? s.net.toFixed(1) : "0.0"} Mbps</span>
+      <span className="hi">{t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
     </div>
   );
 }
@@ -168,25 +119,47 @@ function Tools() {
 export default function App() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("music");
-  const [cfg, setCfg] = useState<Cfg>(() => ({ city: "London", tz: "Asia/Tokyo", style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", ...load<Partial<Cfg>>("cfg", {}) }));
+  const [cfg, setCfg] = useState<Cfg>(() => ({ style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", glass: "glass", hud: "auto", peek: "on", ...load<Partial<Cfg>>("cfg", {}) }));
   const [m, setM] = useState<Media>({ title: "", artist: "", playing: false, active: false, pos: 0, dur: 0 });
   const [at, setAt] = useState(Date.now());
   const [art, setArt] = useState(""); const [col, setCol] = useState("");
   const clip = useClipHistory();
-  const [chatOn, setChatOn] = useState<boolean>(() => load("chatOn", false));
-  const [chatSeen, setChatSeen] = useState<number>(() => load("chatSeen", 0));
-  const allN = useNotifs(chatOn, 5000);
-  const unread = chatOn ? allN.filter((n) => isChat(n) && n.at > chatSeen).length : 0;
   const [snips, setSnips] = useState<Clip[]>(() => load("snips", []));
   const [shelf, setShelf] = useState<string[]>(() => load("shelf", []));
+  const [gaming, setGaming] = useState(false);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [peek, setPeek] = useState<Notif | null>(null);
   const t = useRef<number>();
+  const seen = useRef(new Set<number>()), t0 = useRef(Date.now() - 2000);
+  const nots = useNotifs(cfg.peek === "on", 3000);
 
-  useEffect(() => { save("cfg", cfg); document.documentElement.dataset.surface = cfg.surface; }, [cfg]);
+  const hud = cfg.hud === "always" || (cfg.hud === "auto" && gaming);
+  const float = cfg.style !== "pill", dot = cfg.style === "dot", full = cfg.style === "full";
+  const mode = open ? "open" : peek ? "peek" : hud ? "hud" : "idle";
+
+  useEffect(() => {
+    save("cfg", cfg);
+    const r = document.documentElement; r.dataset.surface = cfg.surface; r.style.setProperty("--ap", GLASS[cfg.glass]);
+  }, [cfg]);
   useEffect(() => {
     const un = listen<boolean>("hover", (e) => { clearTimeout(t.current); t.current = window.setTimeout(() => setOpen(e.payload), e.payload ? 120 : 300); });
     return () => { un.then((f) => f()); };
   }, []);
-  useEffect(() => { invoke("set_expanded", { v: open, cw: cfg.style === "dot" ? 44 : cfg.style === "full" ? 360 : 280, top: cfg.style === "pill" ? 0 : 10 }); }, [open, cfg.style]);
+  useEffect(() => {
+    const a = listen<boolean>("gaming", (e) => setGaming(e.payload)), b = listen<Stats>("stats", (e) => setStats(e.payload));
+    return () => { a.then((f) => f()); b.then((f) => f()); };
+  }, []);
+  useEffect(() => { invoke("set_hud_want", { v: hud }); }, [hud]);
+  useEffect(() => {
+    invoke("set_expanded", { v: open, cw: hud ? 660 : dot ? 44 : full ? 300 : 230, top: float ? 10 : 0 });
+  }, [open, hud, dot, full, float]);
+  useEffect(() => { // peek at notifications that arrive after launch
+    const fresh = nots.filter((n) => !seen.current.has(n.id) && n.at > t0.current);
+    nots.forEach((n) => seen.current.add(n.id));
+    if (fresh.length && !open) setPeek(fresh[0]);
+  }, [nots]);
+  useEffect(() => { if (!peek) return; const x = setTimeout(() => setPeek(null), 2000); return () => clearTimeout(x); }, [peek]);
+  useEffect(() => { if (open) setPeek(null); }, [open]);
   useEffect(() => {
     const poll = () => invoke<Media>("get_media").then((x) => { setM(x); setAt(Date.now()); }).catch(() => {});
     poll(); const i = setInterval(poll, open ? 1000 : 2500); return () => clearInterval(i);
@@ -195,8 +168,6 @@ export default function App() {
     if (!m.title) { setArt(""); setCol(""); return; }
     invoke<string>("get_art").then((a) => { setArt(a); if (a) avgColor(a).then(setCol); else setCol(""); }).catch(() => {});
   }, [m.title, m.artist]);
-  useEffect(() => save("chatOn", chatOn), [chatOn]);
-  useEffect(() => { if (open && tab === "chat" && chatOn) { const t = Date.now(); setChatSeen(t); save("chatSeen", t); } }, [open, tab, chatOn, allN]);
   useEffect(() => save("snips", snips), [snips]);
   useEffect(() => save("shelf", shelf), [shelf]);
   useEffect(() => {
@@ -204,42 +175,52 @@ export default function App() {
     return () => { un.then((f) => f()); };
   }, []);
 
-  const dot = cfg.style === "dot", full = cfg.style === "full", float = dot || full;
   let body: JSX.Element;
   if (tab === "music") body = <Music m={m} at={at} art={art} bar={cfg.bar} />;
-  else if (tab === "widgets") body = <Widgets cfg={cfg} />;
   else if (tab === "tools") body = <Tools />;
   else if (tab === "settings") body = <Settings cfg={cfg} set={setCfg} />;
-  else if (tab === "chat") body = <ChatView on={chatOn} setOn={setChatOn} items={allN} />;
-  else if (tab === "sites") body = <Sites />;
-  else if (tab === "notify") body = <Notifications />;
   else if (tab === "clip") body = <ClipView items={clip.items} clear={clip.clear} snips={snips} setSnips={setSnips} />;
   else if (tab === "shelf") body = <Shelf files={shelf} setFiles={setShelf} />;
-  else if (tab === "call") body = <Call />;
+  else if (tab === "audio") body = <AudioTab />;
   else if (tab === "controls") body = <Controls />;
-  else body = <div className="empty">{SOON[tab]}</div>;
+  else if (tab === "sites") body = <Sites />;
+  else body = <Notifications />;
+
+  const W = { open: 640, peek: 440, hud: 660, idle: dot ? 34 : full ? 300 : 230 }[mode];
+  const H = { open: 270, peek: 64, hud: 30, idle: full ? 44 : 34 }[mode];
+  const flush = !float || mode === "hud";
+  const mt = flush ? 0 : mode === "open" ? 10 : mode === "idle" && dot ? 6 : 8;
+  const rt = flush ? 0 : mode === "open" ? 34 : mode === "peek" ? 28 : dot ? 17 : 22;
+  const rb = mode === "open" ? 34 : mode === "peek" ? 28 : mode === "hud" ? 12 : dot ? 17 : full ? 22 : 18;
+  const fade = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0, transition: { duration: 0.1 } } };
 
   return (
     <motion.div className="island" initial={false}
-      animate={{ width: open ? 640 : dot ? 34 : full ? 360 : 280, height: open ? 270 : full ? 44 : 34, marginTop: float ? (open ? 10 : dot ? 6 : 8) : 0, borderTopLeftRadius: float ? (open ? 34 : dot ? 17 : 22) : 0, borderTopRightRadius: float ? (open ? 34 : dot ? 17 : 22) : 0, borderBottomLeftRadius: open ? 34 : dot ? 17 : full ? 22 : 18, borderBottomRightRadius: open ? 34 : dot ? 17 : full ? 22 : 18 }}
+      animate={{ width: W, height: H, marginTop: mt, borderTopLeftRadius: rt, borderTopRightRadius: rt, borderBottomLeftRadius: rb, borderBottomRightRadius: rb }}
       transition={SPRING}>
-      <div className="glow" style={{ "--art": col || "transparent", opacity: col && cfg.bg === "album" && ((open && tab === "music") || (!open && full)) ? 0.55 : 0 } as CSSProperties} />
-      {!open && (
-        <div className={"collapsed" + (dot ? " dot" : full ? " full" : "")}>
-          {!dot && (art ? <img src={art} alt="" /> : <span />)}
-          {unread > 0 && <span className="badge">{unread > 9 ? "9+" : unread}</span>}
-          {m.playing && !(dot && unread > 0) && <div className={"bars" + (cfg.viz === "pixels" ? " px" : "")}><i /><i /><i /><i /></div>}
-        </div>
-      )}
-      <AnimatePresence>
-        {open && (
+      <div className="glow" style={{ "--art": col || "transparent", opacity: col && cfg.bg === "album" && ((open && tab === "music") || (mode === "idle" && full)) ? 0.55 : 0 } as CSSProperties} />
+      <AnimatePresence initial={false}>
+        {mode === "idle" && (
+          <motion.div key="idle" className={"collapsed" + (dot ? " dot" : full ? " full" : "")} {...fade}>
+            {!dot && (art ? <img src={art} alt="" /> : <span />)}
+            {m.playing && <div className={"bars" + (cfg.viz === "pixels" ? " px" : "")}><i /><i /><i /><i /></div>}
+          </motion.div>
+        )}
+        {mode === "hud" && <motion.div key="hud" className="collapsed hudw" {...fade}><Hud s={stats} /></motion.div>}
+        {mode === "peek" && peek && (
+          <motion.div key="peek" className="pk" {...fade}>
+            <span className="nri" style={{ background: `hsl(${hue(peek.app)} 60% 45%)` }}>{(peek.title || "?").charAt(0).toUpperCase()}</span>
+            <div className="pkt"><b>{peek.title}</b><span>{peek.body || appName(peek.app)}</span></div>
+          </motion.div>
+        )}
+        {mode === "open" && (
           <motion.div className="card" key="card" initial={{ opacity: 0, y: -8, filter: "blur(6px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)", transition: { delay: 0.08, duration: 0.25 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>
             <nav className="tabs">
-              {TABS.map((k) => (
+              {TABS.map(([k, ic]) => (
                 <span key={k} style={{ display: "contents" }}>
                   {k === "settings" && <b className="sep" />}
-                  <button className={"tab" + (tab === k ? " on" : "")} onClick={() => setTab(k)} aria-label={k}><Icon d={ICONS[k]} /></button>
+                  <button className={"tab" + (tab === k ? " on" : "")} onClick={() => setTab(k)} aria-label={k}><I n={ic} s={22} /></button>
                 </span>
               ))}
             </nav>

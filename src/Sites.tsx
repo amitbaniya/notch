@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { I, IconName } from "./icons";
 
 type Site = { name: string; url: string };
 const DEFAULT: Site[] = [
@@ -40,7 +41,7 @@ export function Sites() {
         ))}
         {adding
           ? <input className="sxin" autoFocus value={v} placeholder="youtube.com" onChange={(e) => setV(e.target.value)} onBlur={add} onKeyDown={(e) => { if (e.key === "Enter") add(); if (e.key === "Escape") setAdding(false); }} />
-          : <button className="sx sxadd" onClick={() => { setV(""); setAdding(true); }}>＋ Add a site</button>}
+          : <button className="sx sxadd" onClick={() => { setV(""); setAdding(true); }}><I n="plus" s={16} /> Add a site</button>}
       </div>
       <div className="hint">Sites open in their own window and stay signed in. Shift-click opens your browser instead.</div>
     </div>
