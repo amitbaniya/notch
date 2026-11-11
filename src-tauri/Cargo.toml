@@ -1,0 +1,22 @@
+[package]
+name = "notch"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-clipboard-manager = "2"
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(windows)'.dependencies]
+clipboard-win = "5"
+windows = { version = "0.58", features = ["Media_Control", "Foundation", "Storage_Streams"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
