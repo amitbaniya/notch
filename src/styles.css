@@ -120,3 +120,9 @@ button,input{font:inherit;color:inherit}
 .simplebar i{display:block;height:100%;border-radius:2px;background:var(--accent)}
 .cometbar i{position:absolute;left:0;top:0;height:100%;background:linear-gradient(90deg,transparent,var(--accent));border-radius:2px}
 .cometbar b{position:absolute;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:#fff;box-shadow:0 0 10px 3px var(--accent)}
+.cometbar span.t{position:absolute;top:50%;border-radius:50%;background:var(--accent);animation:tail 1s ease-in-out infinite}
+.cometbar .t1{width:7px;height:7px;margin:-3.5px 0 0 -15px;opacity:.8}
+.cometbar .t2{width:5px;height:5px;margin:-2.5px 0 0 -27px;opacity:.55;animation-delay:.15s}
+.cometbar .t3{width:3px;height:3px;margin:-1.5px 0 0 -37px;opacity:.35;animation-delay:.3s}
+@keyframes tail{0%,100%{transform:translateY(-1.5px) scale(1)}50%{transform:translateY(1.5px) scale(.7)}}
+@media (prefers-reduced-motion:reduce){.cometbar span.t{animation:none}}

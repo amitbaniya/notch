@@ -7,13 +7,13 @@ use std::sync::{atomic::{AtomicBool, AtomicU32, Ordering}, Arc, Mutex};
 use std::time::Duration;
 use tauri::{Emitter, Manager, PhysicalPosition, State};
 
-struct Expanded(Arc<AtomicBool>, Arc<AtomicU32>);
+struct Expanded(Arc<AtomicBool>, Arc<AtomicU32>, Arc<AtomicU32>);
 
 #[derive(Serialize, Default)]
 struct Media { title: String, artist: String, playing: bool, active: bool, pos: f64, dur: f64 }
 
 #[tauri::command]
-fn set_expanded(state: State<Expanded>, v: bool, cw: f64) { state.0.store(v, Ordering::Relaxed); state.1.store(cw as u32, Ordering::Relaxed); }
+fn set_expanded(state: State<Expanded>, v: bool, cw: f64, top: f64) { state.0.store(v, Ordering::Relaxed); state.1.store(cw as u32, Ordering::Relaxed); state.2.store(top as u32, Ordering::Relaxed); }
 
 #[tauri::command]
 async fn get_media() -> Media {
@@ -344,7 +344,7 @@ async fn set_power(mode: String) {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(Expanded(Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(280))))
+        .manage(Expanded(Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(280)), Arc::new(AtomicU32::new(0))))
         .manage(Arc::new(Share::default()))
         .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power])
         .setup(|app| {
@@ -357,6 +357,7 @@ fn main() {
             win.set_ignore_cursor_events(true)?;
             let exp = app.state::<Expanded>().0.clone();
             let cwv = app.state::<Expanded>().1.clone();
+            let topv = app.state::<Expanded>().2.clone();
             // The window is click-through; poll the cursor to detect hover over the island.
             std::thread::spawn(move || {
                 let mut last = false;
@@ -367,7 +368,7 @@ fn main() {
                     let lx = (c.x - p.x as f64) / sf;
                     let ly = (c.y - p.y as f64) / sf;
                     let ww = sz.width as f64 / sf;
-                    let (w, h) = if exp.load(Ordering::Relaxed) { (640.0, 270.0) } else { (cwv.load(Ordering::Relaxed) as f64, 56.0) };
+                    let (w, h) = if exp.load(Ordering::Relaxed) { (640.0, 270.0 + topv.load(Ordering::Relaxed) as f64) } else { (cwv.load(Ordering::Relaxed) as f64, 56.0) };
                     let inside = lx >= (ww - w) / 2.0 && lx <= (ww + w) / 2.0 && ly >= 0.0 && ly <= h;
                     if inside != last {
                         last = inside;

@@ -51,7 +51,31 @@ const avgColor = (src: string) => new Promise<string>((res) => {
   im.onerror = () => res(""); im.src = src;
 });
 
-function Music({ m, art, pos, bar }: { m: Media; art: string; pos: number; bar: Bar }) {
+function useSmoothPos(m: Media, at: number) {
+  const base = useRef({ pos: 0, t: Date.now(), title: "", until: 0 });
+  const [pos, setPos] = useState(0);
+  // Resync to the player's reported position only when it really differs (seek, new track, resume),
+  // so the 1s polling never makes the bar jump.
+  useEffect(() => {
+    const b = base.current, now = Date.now();
+    if (now < b.until) return;
+    const predicted = b.pos + (m.playing ? (now - b.t) / 1000 : 0);
+    if (!m.playing || m.title !== b.title || Math.abs(m.pos - predicted) > 2.5) base.current = { pos: m.pos, t: at, title: m.title, until: 0 };
+  }, [m.pos, m.playing, m.title, at]);
+  useEffect(() => {
+    const read = () => Math.min(m.dur || Infinity, base.current.pos + (m.playing ? (Date.now() - base.current.t) / 1000 : 0));
+    if (!m.playing) { setPos(read()); return; }
+    let raf = 0;
+    const loop = () => { setPos(read()); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [m.playing, m.dur, m.pos, m.title, at]);
+  const jump = (s: number) => { base.current = { pos: s, t: Date.now(), title: m.title, until: Date.now() + 1500 }; setPos(s); };
+  return [pos, jump] as const;
+}
+
+function Music({ m, at, art, bar }: { m: Media; at: number; art: string; bar: Bar }) {
+  const [pos, jump] = useSmoothPos(m, at);
   const c = (a: string) => invoke("media_control", { action: a });
   if (!m.active) return <div className="empty">Nothing playing. Start music in any app.</div>;
   const f = m.dur ? Math.min(1, pos / m.dur) : 0;
@@ -64,7 +88,7 @@ function Music({ m, art, pos, bar }: { m: Media; art: string; pos: number; bar: 
         <button className="big" onClick={() => c("toggle")} aria-label="Play or pause">{m.playing ? "⏸" : "▶"}</button>
         <button onClick={() => c("next")} aria-label="Next">⏭</button>
       </div>
-      <Progress kind={bar} frac={f} seed={m.title} onSeek={(x) => m.dur && c(`seek:${x * m.dur}`)} />
+      <Progress kind={bar} frac={f} seed={m.title} onSeek={(x) => { if (m.dur) { jump(x * m.dur); c(`seek:${x * m.dur}`); } }} />
       <div className="times"><span>{mmss(pos)}</span><span>-{mmss(m.dur - pos)}</span></div>
     </div>
   );
@@ -147,7 +171,6 @@ export default function App() {
   const [m, setM] = useState<Media>({ title: "", artist: "", playing: false, active: false, pos: 0, dur: 0 });
   const [at, setAt] = useState(Date.now());
   const [art, setArt] = useState(""); const [col, setCol] = useState("");
-  const [tick, setTick] = useState(0);
   const clip = useClipHistory();
   const [snips, setSnips] = useState<Clip[]>(() => load("snips", []));
   const [shelf, setShelf] = useState<string[]>(() => load("shelf", []));
@@ -158,15 +181,11 @@ export default function App() {
     const un = listen<boolean>("hover", (e) => { clearTimeout(t.current); t.current = window.setTimeout(() => setOpen(e.payload), e.payload ? 120 : 300); });
     return () => { un.then((f) => f()); };
   }, []);
-  useEffect(() => { invoke("set_expanded", { v: open, cw: cfg.style === "dot" ? 44 : cfg.style === "full" ? 360 : 280 }); }, [open, cfg.style]);
+  useEffect(() => { invoke("set_expanded", { v: open, cw: cfg.style === "dot" ? 44 : cfg.style === "full" ? 360 : 280, top: cfg.style === "pill" ? 0 : 10 }); }, [open, cfg.style]);
   useEffect(() => {
     const poll = () => invoke<Media>("get_media").then((x) => { setM(x); setAt(Date.now()); }).catch(() => {});
     poll(); const i = setInterval(poll, open ? 1000 : 2500); return () => clearInterval(i);
   }, [open]);
-  useEffect(() => {
-    if (!open || tab !== "music" || !m.playing) return;
-    const i = setInterval(() => setTick((n) => n + 1), 250); return () => clearInterval(i);
-  }, [open, tab, m.playing]);
   useEffect(() => {
     if (!m.title) { setArt(""); setCol(""); return; }
     invoke<string>("get_art").then((a) => { setArt(a); if (a) avgColor(a).then(setCol); else setCol(""); }).catch(() => {});
@@ -178,11 +197,9 @@ export default function App() {
     return () => { un.then((f) => f()); };
   }, []);
 
-  void tick;
-  const dot = cfg.style === "dot", full = cfg.style === "full";
-  const pos = Math.min(m.dur || Infinity, m.pos + (m.playing ? (Date.now() - at) / 1000 : 0));
+  const dot = cfg.style === "dot", full = cfg.style === "full", float = dot || full;
   let body: JSX.Element;
-  if (tab === "music") body = <Music m={m} art={art} pos={pos} bar={cfg.bar} />;
+  if (tab === "music") body = <Music m={m} at={at} art={art} bar={cfg.bar} />;
   else if (tab === "widgets") body = <Widgets cfg={cfg} />;
   else if (tab === "tools") body = <Tools />;
   else if (tab === "settings") body = <Settings cfg={cfg} set={setCfg} />;
@@ -197,7 +214,7 @@ export default function App() {
 
   return (
     <motion.div className="island" initial={false}
-      animate={{ width: open ? 640 : dot ? 34 : full ? 360 : 280, height: open ? 270 : full ? 44 : 34, marginTop: !open && dot ? 6 : !open && full ? 8 : 0, borderTopLeftRadius: !open && (dot || full) ? (dot ? 17 : 22) : 0, borderTopRightRadius: !open && (dot || full) ? (dot ? 17 : 22) : 0, borderBottomLeftRadius: open ? 34 : dot ? 17 : full ? 22 : 18, borderBottomRightRadius: open ? 34 : dot ? 17 : full ? 22 : 18 }}
+      animate={{ width: open ? 640 : dot ? 34 : full ? 360 : 280, height: open ? 270 : full ? 44 : 34, marginTop: float ? (open ? 10 : dot ? 6 : 8) : 0, borderTopLeftRadius: float ? (open ? 34 : dot ? 17 : 22) : 0, borderTopRightRadius: float ? (open ? 34 : dot ? 17 : 22) : 0, borderBottomLeftRadius: open ? 34 : dot ? 17 : full ? 22 : 18, borderBottomRightRadius: open ? 34 : dot ? 17 : full ? 22 : 18 }}
       transition={SPRING}>
       <div className="glow" style={{ "--art": col || "transparent", opacity: col && cfg.bg === "album" && ((open && tab === "music") || (!open && full)) ? 0.55 : 0 } as CSSProperties} />
       {!open && (
