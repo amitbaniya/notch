@@ -4,7 +4,7 @@ Dynamic Island-style notch for Windows 10/11. Tauri 2 + React + TypeScript + Mot
 Setup: install Rust, Node 18+ and WebView2. Then `npm install` and `npm run tauri dev` (`npm run tauri build` for an installer).
 
 Hover the top-centre of the screen to open.
-Tabs: Music, Sites, Notifications, Shelf, Clipboard, Controls, Tools, Audio (per-app mixer), Settings. Gaming bar while a game is fullscreen; notification peek; glass look with transparency and size sliders (size scales everything, keeping proportions); Settings has an open-at-startup switch.
+Tabs: Music, Sites, Notifications, Shelf, Clipboard, Controls, Tools, Audio (per-app mixer), Settings. Ctrl+Alt+N hides Notch (a small handle stays at the top; click it to bring it back). Gaming bar while a game is fullscreen; notification peek; glass look with transparency and separate Notch size and Open size sliders; Settings has an open-at-startup switch.
 Phase 4 adds: Sites (own windows, stay signed in), Notifications and Chat overlay (read from the Windows toast database; WhatsApp, Instagram, Messenger, Telegram, Discord).
 Settings > Appearance: Shape (Island / Notch / Hole punch), Surface themes, Progress bar styles, Visualizer, Background.
 Phase 3 adds: Call (mic mute with live level, speaker volume + test, camera check) and Controls (brightness, volume, Wi-Fi, Bluetooth, mute, power plan; Night light and Focus open Windows Settings).

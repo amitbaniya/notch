@@ -139,8 +139,10 @@ function Hud({ s }: { s: Stats | null }) {
 
 export default function App() {
   const [open, setOpen] = useState(false);
+  const [disabled, setDisabled] = useState<boolean>(() => load("disabled", false));
+  const disRef = useRef(disabled); disRef.current = disabled;
   const [tab, setTab] = useState<Tab>("music");
-  const [cfg, setCfg] = useState<Cfg>(() => ({ style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, size: 80, hud: "auto", peek: "on", ...load<Partial<Cfg>>("cfg", {}) }));
+  const [cfg, setCfg] = useState<Cfg>(() => { const sv = load<any>("cfg", {}); return { style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, hud: "auto", peek: "on", ...sv, sizeNotch: sv.sizeNotch ?? sv.size ?? 80, sizeOpen: sv.sizeOpen ?? sv.size ?? 85 }; });
   const [m, setM] = useState<Media>({ title: "", artist: "", playing: false, active: false, pos: 0, dur: 0 });
   const [at, setAt] = useState(Date.now());
   const [art, setArt] = useState(""); const [col, setCol] = useState("");
@@ -154,16 +156,16 @@ export default function App() {
   const seen = useRef(new Set<number>()), t0 = useRef(Date.now() - 2000);
   const nots = useNotifs(cfg.peek === "on", 3000);
 
-  const hud = cfg.hud === "always" || (cfg.hud === "auto" && gaming);
+  const hud = !disabled && (cfg.hud === "always" || (cfg.hud === "auto" && gaming));
   const float = cfg.style !== "pill", dot = cfg.style === "dot", full = cfg.style === "full";
-  const mode = open ? "open" : peek ? "peek" : hud ? "hud" : "idle";
+  const mode = disabled ? "off" : open ? "open" : peek ? "peek" : hud ? "hud" : "idle";
 
   useEffect(() => {
     save("cfg", cfg);
     const r = document.documentElement; r.dataset.surface = cfg.surface; r.style.setProperty("--ap", `${100 - cfg.see}%`);
   }, [cfg]);
   useEffect(() => {
-    const un = listen<boolean>("hover", (e) => { clearTimeout(t.current); t.current = window.setTimeout(() => setOpen(e.payload), e.payload ? 120 : 300); });
+    const un = listen<boolean>("hover", (e) => { clearTimeout(t.current); if (disRef.current) return; t.current = window.setTimeout(() => setOpen(e.payload), e.payload ? 120 : 300); });
     return () => { un.then((f) => f()); };
   }, []);
   useEffect(() => {
@@ -172,9 +174,17 @@ export default function App() {
   }, []);
   useEffect(() => { invoke("set_hud_want", { v: hud }); }, [hud]);
   useEffect(() => {
-    const s = cfg.size / 100; // the hover area in Rust must match the scaled island
-    invoke("set_expanded", { v: open, cw: Math.round((hud ? 660 : dot ? 44 : full ? 300 : 230) * s), top: Math.round((float ? 10 : 0) * s), s });
-  }, [open, hud, dot, full, float, cfg.size]);
+    // the hover area in Rust must match the scaled island
+    const sn = cfg.sizeNotch / 100, so = cfg.sizeOpen / 100;
+    const cw = disabled ? 76 : hud ? 660 : dot ? 44 : full ? 300 : 230, ch = disabled ? 9 : 56;
+    invoke("set_expanded", { v: open, cw: Math.round(cw * sn), ch: Math.round(ch * sn), top: Math.round((float ? 10 : 0) * so), s: so });
+  }, [open, hud, dot, full, float, disabled, cfg.sizeNotch, cfg.sizeOpen]);
+  useEffect(() => save("disabled", disabled), [disabled]);
+  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
+  useEffect(() => { // global shortcut (Ctrl+Alt+N) from Rust
+    const un = listen("toggle-notch", () => setDisabled((d) => !d));
+    return () => { un.then((f) => f()); };
+  }, []);
   useEffect(() => { // peek at notifications that arrive after launch
     const fresh = nots.filter((n) => !seen.current.has(n.id) && n.at > t0.current);
     nots.forEach((n) => seen.current.add(n.id));
@@ -200,7 +210,7 @@ export default function App() {
   let body: JSX.Element;
   if (tab === "music") body = <Music m={m} at={at} art={art} bar={cfg.bar} />;
   else if (tab === "tools") body = <Tools />;
-  else if (tab === "settings") body = <Settings cfg={cfg} set={setCfg} />;
+  else if (tab === "settings") body = <Settings cfg={cfg} set={setCfg} enabled={!disabled} setEnabled={(b) => setDisabled(!b)} />;
   else if (tab === "clip") body = <ClipView items={clip.items} clear={clip.clear} snips={snips} setSnips={setSnips} />;
   else if (tab === "shelf") body = <Shelf files={shelf} setFiles={setShelf} />;
   else if (tab === "audio") body = <AudioTab />;
@@ -208,16 +218,16 @@ export default function App() {
   else if (tab === "sites") body = <Sites />;
   else body = <Notifications />;
 
-  const W = { open: 640, peek: 440, hud: 660, idle: dot ? 34 : full ? 300 : 230 }[mode];
-  const H = { open: 270, peek: 64, hud: 30, idle: full ? 44 : 34 }[mode];
-  const flush = !float || mode === "hud";
+  const W = { open: 640, peek: 440, hud: 660, off: 76, idle: dot ? 34 : full ? 300 : 230 }[mode];
+  const H = { open: 270, peek: 64, hud: 30, off: 8, idle: full ? 44 : 34 }[mode];
+  const flush = !float || mode === "hud" || mode === "off";
   const mt = flush ? 0 : mode === "open" ? 10 : mode === "idle" && dot ? 6 : 8;
   const rt = flush ? 0 : mode === "open" ? 34 : mode === "peek" ? 28 : dot ? 17 : 22;
-  const rb = mode === "open" ? 34 : mode === "peek" ? 28 : mode === "hud" ? 12 : dot ? 17 : full ? 22 : 18;
+  const rb = mode === "off" ? 4 : mode === "open" ? 34 : mode === "peek" ? 28 : mode === "hud" ? 12 : dot ? 17 : full ? 22 : 18;
   const fade = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0, transition: { duration: 0.1 } } };
 
   return (
-    <div className="scaler" style={{ transform: `scale(${cfg.size / 100})` }}>
+    <motion.div className="scaler" initial={false} animate={{ scale: (open ? cfg.sizeOpen : cfg.sizeNotch) / 100 }} transition={SPRING}>
     <motion.div className="island" initial={false}
       animate={{ width: W, height: H, marginTop: mt, borderTopLeftRadius: rt, borderTopRightRadius: rt, borderBottomLeftRadius: rb, borderBottomRightRadius: rb }}
       transition={SPRING}>
@@ -225,11 +235,12 @@ export default function App() {
       <AnimatePresence initial={false}>
         {mode === "idle" && (
           <motion.div key="idle" className={"collapsed" + (dot ? " dot" : full ? " full" : "")} {...fade}>
-            {!dot && (art ? <img src={art} alt="" /> : <span />)}
+            {!dot && (art ? <img src={art} alt="" /> : <span className="ph" />)}
             {!dot && !m.playing && <MiniClock />}
             {m.playing && <div className={"bars" + (cfg.viz === "pixels" ? " px" : "")}><i /><i /><i /><i /></div>}
           </motion.div>
         )}
+        {mode === "off" && <motion.div key="off" className="handle" title="Click to show Notch" onClick={() => setDisabled(false)} {...fade} />}
         {mode === "hud" && <motion.div key="hud" className="collapsed hudw" {...fade}><Hud s={stats} /></motion.div>}
         {mode === "peek" && peek && (
           <motion.div key="peek" className="pk" {...fade}>
@@ -253,6 +264,6 @@ export default function App() {
         )}
       </AnimatePresence>
     </motion.div>
-    </div>
+    </motion.div>
   );
 }

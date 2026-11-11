@@ -6,14 +6,15 @@ use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::sync::{atomic::{AtomicBool, AtomicU32, Ordering}, Arc, Mutex};
 use std::time::Duration;
 use tauri::{Emitter, Manager, PhysicalPosition, State};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
-struct Expanded(Arc<AtomicBool>, Arc<AtomicU32>, Arc<AtomicU32>, Arc<AtomicU32>);
+struct Expanded(Arc<AtomicBool>, Arc<AtomicU32>, Arc<AtomicU32>, Arc<AtomicU32>, Arc<AtomicU32>);
 
 #[derive(Serialize, Default)]
 struct Media { title: String, artist: String, playing: bool, active: bool, pos: f64, dur: f64 }
 
 #[tauri::command]
-fn set_expanded(state: State<Expanded>, v: bool, cw: f64, top: f64, s: f64) { state.0.store(v, Ordering::Relaxed); state.1.store(cw as u32, Ordering::Relaxed); state.2.store(top as u32, Ordering::Relaxed); state.3.store((s * 100.0) as u32, Ordering::Relaxed); }
+fn set_expanded(state: State<Expanded>, v: bool, cw: f64, ch: f64, top: f64, s: f64) { state.4.store(ch as u32, Ordering::Relaxed); state.0.store(v, Ordering::Relaxed); state.1.store(cw as u32, Ordering::Relaxed); state.2.store(top as u32, Ordering::Relaxed); state.3.store((s * 100.0) as u32, Ordering::Relaxed); }
 
 #[tauri::command]
 async fn get_media() -> Media {
@@ -505,12 +506,15 @@ async fn set_app_mute(pid: u32, m: bool) {
 #[cfg(windows)]
 fn fullscreen_game() -> bool {
     use windows::Win32::{Foundation::RECT, Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST},
-        UI::WindowsAndMessaging::{GetClassNameW, GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId}};
+        UI::WindowsAndMessaging::{GetClassNameW, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsZoomed, GWL_STYLE, WS_CAPTION, WS_THICKFRAME}};
     unsafe {
         let h = GetForegroundWindow();
         if h.is_invalid() { return false; }
         let mut r = RECT::default();
         if GetWindowRect(h, &mut r).is_err() { return false; }
+        // Normal apps (Spotify, browsers...) keep a resizable frame even when maximized; fullscreen games are borderless pop-ups.
+        let style = GetWindowLongPtrW(h, GWL_STYLE) as u32;
+        if style & WS_CAPTION.0 == WS_CAPTION.0 || style & WS_THICKFRAME.0 != 0 || IsZoomed(h).as_bool() { return false; }
         let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
         if !GetMonitorInfoW(MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), &mut mi).as_bool() { return false; }
         let m = mi.rcMonitor;
@@ -522,7 +526,7 @@ fn fullscreen_game() -> bool {
         let mut pid = 0u32;
         GetWindowThreadProcessId(h, Some(&mut pid as *mut u32));
         let name = proc_name(pid).to_lowercase();
-        !["chrome", "msedge", "firefox", "brave", "opera", "vlc", "mpv", "explorer", "notch", "applicationframehost", "code"].contains(&name.as_str())
+        !["chrome", "msedge", "firefox", "brave", "opera", "vlc", "mpv", "explorer", "notch", "applicationframehost", "code", "spotify", "discord", "slack", "teams", "ms-teams", "whatsapp", "telegram", "notion", "obsidian", "figma", "zoom", "devenv", "photoshop", "winword", "excel", "powerpnt"].contains(&name.as_str())
     }
 }
 
@@ -539,10 +543,11 @@ fn stats_loop(app: tauri::AppHandle, want: Arc<AtomicBool>) {
     #[cfg(windows)]
     {
         let mut sys = sysinfo::System::new();
-        let (mut last_rx, mut last_g) = (0u64, false);
+        let (mut last_rx, mut last_g, mut streak) = (0u64, false, 0u32);
         loop {
             std::thread::sleep(Duration::from_secs(1));
-            let g = fullscreen_game();
+            streak = if fullscreen_game() { streak + 1 } else { 0 };
+            let g = streak >= 2; // must hold for 2 seconds, so brief fullscreen windows don't flash the bar
             if g != last_g { last_g = g; let _ = app.emit("gaming", g); }
             if !want.load(Ordering::Relaxed) { last_rx = 0; continue; }
             sys.refresh_cpu_usage();
@@ -564,8 +569,11 @@ fn stats_loop(app: tauri::AppHandle, want: Arc<AtomicBool>) {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().with_handler(|app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed { let _ = app.emit("toggle-notch", ()); }
+        }).build())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
-        .manage(Expanded(Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(280)), Arc::new(AtomicU32::new(0)), Arc::new(AtomicU32::new(100))))
+        .manage(Expanded(Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(280)), Arc::new(AtomicU32::new(0)), Arc::new(AtomicU32::new(100)), Arc::new(AtomicU32::new(56))))
         .manage(Arc::new(Share::default()))
         .manage(HudWant(Arc::new(AtomicBool::new(false))))
         .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, get_sessions, set_app_volume, set_app_mute, set_hud_want])
@@ -581,6 +589,8 @@ fn main() {
             let cwv = app.state::<Expanded>().1.clone();
             let topv = app.state::<Expanded>().2.clone();
             let sv = app.state::<Expanded>().3.clone();
+            let chv = app.state::<Expanded>().4.clone();
+            let _ = app.global_shortcut().register("ctrl+alt+n");
             // The window is click-through; poll the cursor to detect hover over the island.
             std::thread::spawn(move || {
                 let mut last = false;
@@ -591,7 +601,7 @@ fn main() {
                     let lx = (c.x - p.x as f64) / sf;
                     let ly = (c.y - p.y as f64) / sf;
                     let ww = sz.width as f64 / sf;
-                    let (w, h) = if exp.load(Ordering::Relaxed) { (640.0 * sv.load(Ordering::Relaxed) as f64 / 100.0, 270.0 * sv.load(Ordering::Relaxed) as f64 / 100.0 + topv.load(Ordering::Relaxed) as f64) } else { (cwv.load(Ordering::Relaxed) as f64, 56.0 * sv.load(Ordering::Relaxed) as f64 / 100.0) };
+                    let (w, h) = if exp.load(Ordering::Relaxed) { (640.0 * sv.load(Ordering::Relaxed) as f64 / 100.0, 270.0 * sv.load(Ordering::Relaxed) as f64 / 100.0 + topv.load(Ordering::Relaxed) as f64) } else { (cwv.load(Ordering::Relaxed) as f64, chv.load(Ordering::Relaxed) as f64) };
                     let inside = lx >= (ww - w) / 2.0 && lx <= (ww + w) / 2.0 && ly >= 0.0 && ly <= h;
                     if inside != last {
                         last = inside;

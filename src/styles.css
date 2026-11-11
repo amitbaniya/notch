@@ -5,7 +5,7 @@ button,input{font:inherit;color:inherit}
 .island{background:var(--bg);overflow:hidden;position:relative;box-shadow:0 0 0 1px var(--edge) inset,0 14px 34px #000a}
 .glow{position:absolute;inset:0;transition:opacity .5s;background:radial-gradient(110% 100% at 15% 0%,var(--art),transparent 70%),radial-gradient(90% 80% at 100% 100%,var(--art),transparent 70%);pointer-events:none}
 .collapsed{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
-.collapsed img{width:24px;height:24px;border-radius:7px}.collapsed span{width:24px}
+.collapsed img{width:24px;height:24px;border-radius:7px}.collapsed .ph{width:24px}
 .bars{display:flex;gap:2px;align-items:flex-end;height:14px}
 .bars i{width:3px;background:var(--accent);border-radius:2px;animation:b .9s ease-in-out infinite}
 .bars i:nth-child(2){animation-delay:.2s}.bars i:nth-child(3){animation-delay:.4s}.bars i:nth-child(4){animation-delay:.6s}
@@ -205,3 +205,5 @@ button,input{font:inherit;color:inherit}
 .bigclock .hint{margin-top:8px}
 /* the idle clock must span the whole pill, not inherit the 24px placeholder width */
 .collapsed .mini{width:auto;left:0;right:0;text-align:center}
+.handle{position:absolute;inset:0;cursor:pointer}
+.island:has(.handle){opacity:.9}

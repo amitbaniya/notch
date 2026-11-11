@@ -10,11 +10,18 @@ const Row = ({ title, desc, children, inline }: { title: string; desc?: string; 
     ? <div className="sr inl"><div><b>{title}</b>{desc && <p>{desc}</p>}</div>{children}</div>
     : <div className="sr"><b>{title}</b>{desc && <p>{desc}</p>}{children}</div>
 );
+const Slider = ({ v, min, max, set, label }: { v: number; min: number; max: number; set: (n: number) => void; label: string }) => (
+  <div className="rg">
+    <input type="range" min={min} max={max} value={v} style={{ "--v": `${((v - min) / (max - min)) * 100}%` } as React.CSSProperties}
+      onChange={(e) => set(Number(e.target.value))} aria-label={label} />
+    <span className="mp">{v}%</span>
+  </div>
+);
 const Toggle = ({ on, set, label }: { on: boolean; set: () => void; label: string }) => (
   <button role="switch" aria-checked={on} aria-label={label} className={"tg" + (on ? " on" : "")} onClick={set}><i /></button>
 );
 
-export function Settings({ cfg, set }: { cfg: Cfg; set: (c: Cfg) => void }) {
+export function Settings({ cfg, set, enabled, setEnabled }: { cfg: Cfg; set: (c: Cfg) => void; enabled: boolean; setEnabled: (b: boolean) => void }) {
   const up = <K extends keyof Cfg>(k: K) => (v: Cfg[K]) => set({ ...cfg, [k]: v });
   const [auto, setAuto] = useState(false);
   useEffect(() => { isEnabled().then(setAuto).catch(() => {}); }, []);
@@ -22,17 +29,17 @@ export function Settings({ cfg, set }: { cfg: Cfg; set: (c: Cfg) => void }) {
   return (
     <div className="set">
       <div className="sh">GENERAL</div>
+      <Row inline title="Show island" desc="Shortcut: Ctrl+Alt+N. When off, only a small handle stays at the top edge; click it to bring the island back."><Toggle on={enabled} set={() => setEnabled(!enabled)} label="Show island" /></Row>
       <Row inline title="Open at startup" desc="Start Notch when you sign in to Windows."><Toggle on={auto} set={toggleAuto} label="Open at startup" /></Row>
       <div className="sh" style={{ marginTop: 8 }}>APPEARANCE</div>
       <Row title="Shape" desc="A floating island under the top edge, a notch that hangs from it, or a small hole punch.">
         <Seg v={cfg.style} set={up("style")} opts={[["full", "Island"], ["pill", "Notch"], ["dot", "Hole punch"]]} />
       </Row>
-      <Row title="Size" desc="Scales the whole island, keeping its proportions. Smaller means less of your screen is covered.">
-        <div className="rg">
-          <input type="range" min={40} max={110} value={cfg.size} style={{ "--v": `${((cfg.size - 40) / 70) * 100}%` } as React.CSSProperties}
-            onChange={(e) => up("size")(Number(e.target.value))} aria-label="Size" />
-          <span className="mp">{cfg.size}%</span>
-        </div>
+      <Row title="Notch size" desc="Scales the small collapsed island. Smaller covers less of your screen, e.g. browser tabs.">
+        <Slider v={cfg.sizeNotch} min={40} max={100} set={up("sizeNotch")} label="Notch size" />
+      </Row>
+      <Row title="Open size" desc="Scales the island when it is fully open. Proportions never change.">
+        <Slider v={cfg.sizeOpen} min={50} max={110} set={up("sizeOpen")} label="Open size" />
       </Row>
       <Row title="Transparency" desc="Slide right to see more of what's behind the island.">
         <div className="rg">
