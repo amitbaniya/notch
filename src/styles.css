@@ -203,3 +203,5 @@ button,input{font:inherit;color:inherit}
 .bigclock{margin:auto;text-align:center;display:flex;flex-direction:column;gap:2px}
 .bigt2{font-size:56px;font-weight:300;letter-spacing:-2px;line-height:1.05;font-variant-numeric:tabular-nums}
 .bigclock .hint{margin-top:8px}
+/* the idle clock must span the whole pill, not inherit the 24px placeholder width */
+.collapsed .mini{width:auto;left:0;right:0;text-align:center}
