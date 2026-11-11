@@ -188,7 +188,7 @@ fn main() {
                     let lx = (c.x - p.x as f64) / sf;
                     let ly = (c.y - p.y as f64) / sf;
                     let ww = sz.width as f64 / sf;
-                    let (w, h) = if exp.load(Ordering::Relaxed) { (640.0, 270.0) } else { (cwv.load(Ordering::Relaxed) as f64, 44.0) };
+                    let (w, h) = if exp.load(Ordering::Relaxed) { (640.0, 270.0) } else { (cwv.load(Ordering::Relaxed) as f64, 56.0) };
                     let inside = lx >= (ww - w) / 2.0 && lx <= (ww + w) / 2.0 && ly >= 0.0 && ly <= h;
                     if inside != last {
                         last = inside;

@@ -7,7 +7,7 @@ import { Shelf } from "./Shelf";
 
 type Media = { title: string; artist: string; playing: boolean; active: boolean; pos: number; dur: number };
 type Tab = "music" | "sites" | "notify" | "chat" | "shelf" | "clip" | "widgets" | "controls" | "tools" | "call" | "settings";
-type Cfg = { city: string; tz: string; accent: string; style: "pill" | "dot" };
+type Cfg = { city: string; tz: string; accent: string; style: "pill" | "full" | "dot" };
 type Item = { t: string; d: boolean };
 
 const SPRING = { type: "spring", stiffness: 320, damping: 30, mass: 0.9 } as const;
@@ -150,7 +150,7 @@ function Settings({ cfg, set }: { cfg: Cfg; set: (c: Cfg) => void }) {
     <div className="settings">
       <label>Weather city<input value={city} onChange={(e) => setCity(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} /></label>
       <label>Second clock (IANA zone)<input value={tz} onChange={(e) => setTz(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} /></label>
-      <div className="sw st">{(["pill", "dot"] as const).map((s) => <button key={s} style={{ outline: s === cfg.style ? "2px solid var(--accent)" : "none" }} onClick={() => set({ ...cfg, style: s })}>{s === "pill" ? "Pill" : "Hole punch"}</button>)}</div>
+      <div className="sw st">{(["pill", "full", "dot"] as const).map((s) => <button key={s} style={{ outline: s === cfg.style ? "2px solid var(--accent)" : "none" }} onClick={() => set({ ...cfg, style: s })}>{{ pill: "Notch", full: "Full pill", dot: "Hole punch" }[s]}</button>)}</div>
       <div className="sw">{ACCENTS.map((a) => <button key={a} aria-label={a} style={{ background: a, outline: a === cfg.accent ? "2px solid #fff" : "none" }} onClick={() => set({ ...cfg, accent: a })} />)}</div>
     </div>
   );
@@ -174,7 +174,7 @@ export default function App() {
     const un = listen<boolean>("hover", (e) => { clearTimeout(t.current); t.current = window.setTimeout(() => setOpen(e.payload), e.payload ? 120 : 300); });
     return () => { un.then((f) => f()); };
   }, []);
-  useEffect(() => { invoke("set_expanded", { v: open, cw: cfg.style === "dot" ? 44 : 280 }); }, [open, cfg.style]);
+  useEffect(() => { invoke("set_expanded", { v: open, cw: cfg.style === "dot" ? 44 : cfg.style === "full" ? 360 : 280 }); }, [open, cfg.style]);
   useEffect(() => {
     const poll = () => invoke<Media>("get_media").then((x) => { setM(x); setAt(Date.now()); }).catch(() => {});
     poll(); const i = setInterval(poll, open ? 1000 : 2500); return () => clearInterval(i);
@@ -195,7 +195,7 @@ export default function App() {
   }, []);
 
   void tick;
-  const dot = cfg.style === "dot";
+  const dot = cfg.style === "dot", full = cfg.style === "full";
   const pos = Math.min(m.dur || Infinity, m.pos + (m.playing ? (Date.now() - at) / 1000 : 0));
   let body: JSX.Element;
   if (tab === "music") body = <Music m={m} art={art} pos={pos} />;
@@ -211,11 +211,11 @@ export default function App() {
 
   return (
     <motion.div className="island" initial={false}
-      animate={{ width: open ? 640 : dot ? 34 : 280, height: open ? 270 : 34, marginTop: !open && dot ? 6 : 0, borderTopLeftRadius: !open && dot ? 17 : 0, borderTopRightRadius: !open && dot ? 17 : 0, borderBottomLeftRadius: open ? 34 : dot ? 17 : 18, borderBottomRightRadius: open ? 34 : dot ? 17 : 18 }}
+      animate={{ width: open ? 640 : dot ? 34 : full ? 360 : 280, height: open ? 270 : full ? 44 : 34, marginTop: !open && dot ? 6 : !open && full ? 8 : 0, borderTopLeftRadius: !open && (dot || full) ? (dot ? 17 : 22) : 0, borderTopRightRadius: !open && (dot || full) ? (dot ? 17 : 22) : 0, borderBottomLeftRadius: open ? 34 : dot ? 17 : full ? 22 : 18, borderBottomRightRadius: open ? 34 : dot ? 17 : full ? 22 : 18 }}
       transition={SPRING}>
-      <div className="glow" style={{ "--art": col || "transparent", opacity: open && tab === "music" && col ? 0.6 : 0 } as CSSProperties} />
+      <div className="glow" style={{ "--art": col || "transparent", opacity: col && ((open && tab === "music") || (!open && full)) ? 0.55 : 0 } as CSSProperties} />
       {!open && (
-        <div className={"collapsed" + (dot ? " dot" : "")}>
+        <div className={"collapsed" + (dot ? " dot" : full ? " full" : "")}>
           {!dot && (art ? <img src={art} alt="" /> : <span />)}
           {m.playing && <div className="bars"><i /><i /><i /><i /></div>}
         </div>

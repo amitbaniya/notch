@@ -75,3 +75,4 @@ button,input{font:inherit;color:inherit}
 .tile{flex:none;width:92px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:8px 4px;border-radius:14px}
 .tile:hover{background:var(--card)}.ti{font-size:44px}.tn{max-width:88px;font-size:12px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .qr{flex:none;display:flex;flex-direction:column;align-items:center;gap:4px}.qr img{width:130px;height:130px;border-radius:12px;background:#fff}
+.collapsed.full{padding:0 14px}.collapsed.full img{width:30px;height:30px;border-radius:9px}.collapsed.full .bars{transform:scale(1.3)}
