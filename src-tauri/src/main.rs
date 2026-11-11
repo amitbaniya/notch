@@ -286,13 +286,36 @@ async fn get_brightness() -> i32 {
     -1
 }
 
+// One long-lived PowerShell process, so brightness can change in real time while dragging
+// (starting a new process per change would take ~1s each).
+#[cfg(windows)]
+fn ps_send(line: &str) {
+    use std::os::windows::process::CommandExt;
+    use std::process::{Command, Stdio};
+    static PS: std::sync::OnceLock<Mutex<Option<std::process::ChildStdin>>> = std::sync::OnceLock::new();
+    let mut g = PS.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    for _ in 0..2 {
+        if g.is_none() {
+            let child = Command::new("powershell").args(["-NoProfile", "-NoLogo", "-NonInteractive", "-Command", "-"])
+                .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).creation_flags(0x08000000).spawn();
+            if let Ok(mut c) = child {
+                if let Some(mut i) = c.stdin.take() {
+                    let _ = writeln!(i, "$m = Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods");
+                    *g = Some(i);
+                }
+            }
+        }
+        if let Some(i) = g.as_mut() {
+            if writeln!(i, "{}", line).and_then(|_| i.flush()).is_ok() { return; }
+        }
+        *g = None; // pipe broke: respawn once and retry
+    }
+}
+
 #[tauri::command]
 async fn set_brightness(v: i32) {
     #[cfg(windows)]
-    {
-        let s = format!("Invoke-CimMethod -InputObject (Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods) -MethodName WmiSetBrightness -Arguments @{{Timeout=1;Brightness={}}}", v.clamp(0, 100));
-        run("powershell", &["-NoProfile", "-Command", &s]);
-    }
+    ps_send(&format!("Invoke-CimMethod -InputObject $m -MethodName WmiSetBrightness -Arguments @{{Timeout=1;Brightness={}}} | Out-Null", v.clamp(0, 100)));
     #[cfg(not(windows))]
     let _ = v;
 }

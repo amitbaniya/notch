@@ -18,6 +18,22 @@ function VSlider({ v, set, commit, icon, off }: { v: number; set: (n: number) =>
   );
 }
 
+// Sends the latest slider value while dragging, never queueing more than one call at a time.
+function useLive(cmd: string, map: (n: number) => Record<string, number>) {
+  const busy = useRef(false), pending = useRef<number | null>(null);
+  return (n: number) => {
+    pending.current = n;
+    if (busy.current) return;
+    busy.current = true;
+    const go = () => {
+      const v = pending.current; pending.current = null;
+      if (v === null) { busy.current = false; return; }
+      invoke(cmd, map(v)).catch(() => {}).finally(go);
+    };
+    go();
+  };
+}
+
 const Tile = ({ icon, label, sub, on, click }: { icon: string; label: string; sub: string; on?: boolean; click?: () => void }) => (
   <button className={"tl" + (on ? " on" : "")} onClick={click}><span className="tic">{icon}</span><b>{label}</b><small>{sub}</small></button>
 );
@@ -30,6 +46,8 @@ export function Controls() {
   const [mode, setMode] = useState("");
   const [bat, setBat] = useState<{ level: number; charging: boolean } | null>(null);
   const drag = useRef(false);
+  const liveVol = useLive("set_out_vol", (n) => ({ v: n / 100 }));
+  const liveBr = useLive("set_brightness", (n) => ({ v: n }));
 
   useEffect(() => { if (a && !drag.current) setVol(Math.round(a.out_vol * 100)); }, [a]);
   useEffect(() => {
@@ -50,9 +68,9 @@ export function Controls() {
   return (
     <div className="controls">
       <div className="ctop">
-        <VSlider v={Math.max(br, 0)} off={br < 0} icon="☀" set={setBr} commit={(n) => invoke("set_brightness", { v: n })} />
+        <VSlider v={Math.max(br, 0)} off={br < 0} icon="☀" set={(n) => { setBr(n); liveBr(n); }} commit={(n) => liveBr(n)} />
         <VSlider v={vol ?? 0} off={vol === null} icon={a?.out_mute ? "🔇" : "🔊"}
-          set={(n) => { drag.current = true; setVol(n); }} commit={(n) => { drag.current = false; invoke("set_out_vol", { v: n / 100 }); }} />
+          set={(n) => { drag.current = true; setVol(n); liveVol(n); }} commit={(n) => { drag.current = false; liveVol(n); }} />
         <div className="tiles3">
           <Tile icon="📶" label="Wi-Fi" sub={st(rad.wifi)} on={!!rad.wifi} click={() => radio(false)} />
           <Tile icon="ᛒ" label="Bluetooth" sub={st(rad.bt)} on={!!rad.bt} click={() => radio(true)} />
