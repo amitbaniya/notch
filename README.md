@@ -11,3 +11,8 @@ Phase 3 adds: Call (mic mute with live level, speaker volume + test, camera chec
 Phase 2 adds: Clipboard cards (text, links, images, files, snippets), Shelf (drag files in, Send to phone via QR), and a Notch / Full pill / Hole punch collapsed style in Settings.
 Working tabs: Music (art, seek, colour glow), Clipboard (in-memory text), Widgets (clock, tasks, weather, battery), Tools (Snip, Record, 6 shortcut slots), Settings.
 Chat overlay needs Windows notification access: not built yet. Sites, Notifications, Shelf, Controls and Call come in later phases.
+
+## Making an installer
+`npm run tauri build` -> `src-tauri/target/release/bundle/nsis/Notch_0.1.0_x64-setup.exe`
+Copy that one file to any Windows 10/11 x64 PC and run it. No Rust or Node needed there.
+It installs per-user (no admin prompt) and sets up WebView2 if the PC doesn't have it (needs internet).

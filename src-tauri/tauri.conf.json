@@ -36,6 +36,16 @@
     ],
     "icon": [
       "icons/icon.ico"
-    ]
+    ],
+    "shortDescription": "Dynamic Island-style notch for Windows",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
+    }
   }
 }
