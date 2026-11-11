@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAudio, useLive } from "./Audio";
 import { I } from "./icons";
+import { brCache, refreshBr, saveBr } from "./cache";
 
 type Radios = { wifi: boolean | null; bt: boolean | null };
 const MODES = [["battery", "Battery"], ["balanced", "Balanced"], ["perf", "Performance"]] as const;
@@ -13,7 +14,8 @@ function VSlider({ v, set, commit, icon, off }: { v: number; set: (n: number) =>
     <div ref={ref} className="vs" style={off ? { opacity: 0.4 } : undefined}
       onPointerDown={(e) => { if (!off) { e.currentTarget.setPointerCapture(e.pointerId); set(f(e)); } }}
       onPointerMove={(e) => { if (e.buttons && !off) set(f(e)); }}
-      onPointerUp={(e) => { if (!off) commit(f(e)); }}>
+      onPointerUp={(e) => { if (!off) commit(f(e)); }}
+      onWheel={(e) => { if (off) return; const n = Math.max(0, Math.min(100, v + (e.deltaY < 0 ? 3 : -3))); set(n); commit(n); }}>
       <i style={{ height: `${v}%` }} /><span className="vt">{off ? "—" : `${v}%`}</span><span className="vi">{icon}</span>
     </div>
   );
@@ -26,7 +28,7 @@ const Tile = ({ icon, label, sub, on, click }: { icon: ReactNode; label: string;
 export function Controls() {
   const [a] = useAudio(1000);
   const [vol, setVol] = useState<number | null>(null);
-  const [br, setBr] = useState(-1);
+  const [br, setBr] = useState(brCache.v);
   const [rad, setRad] = useState<Radios>({ wifi: null, bt: null });
   const [mode, setMode] = useState("");
   const [bat, setBat] = useState<{ level: number; charging: boolean } | null>(null);
@@ -36,7 +38,7 @@ export function Controls() {
 
   useEffect(() => { if (a && !drag.current) setVol(Math.round(a.out_vol * 100)); }, [a]);
   useEffect(() => {
-    invoke<number>("get_brightness").then(setBr).catch(() => {});
+    refreshBr().then(setBr).catch(() => {});
     invoke<Radios>("get_radios").then(setRad).catch(() => {});
     invoke<string>("get_power").then(setMode).catch(() => {});
     (navigator as any).getBattery?.().then((b: any) => {
@@ -53,7 +55,7 @@ export function Controls() {
   return (
     <div className="controls">
       <div className="ctop">
-        <VSlider v={Math.max(br, 0)} off={br < 0} icon={<I n="sun" />} set={(n) => { setBr(n); liveBr(n); }} commit={(n) => liveBr(n)} />
+        <VSlider v={Math.max(br, 0)} off={br < 0} icon={<I n="sun" />} set={(n) => { setBr(n); saveBr(n); liveBr(n); }} commit={(n) => liveBr(n)} />
         <VSlider v={vol ?? 0} off={vol === null} icon={<I n={a?.out_mute ? "volumeOff" : "volume"} />}
           set={(n) => { drag.current = true; setVol(n); liveVol(n); }} commit={(n) => { drag.current = false; liveVol(n); }} />
         <div className="tiles3">

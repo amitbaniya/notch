@@ -25,7 +25,7 @@ export function Progress({ kind, frac, seed, onSeek }: { kind: Bar; frac: number
       <i key={i} className={i < frac * 48 ? "on" : ""} style={{ height: `${30 + 70 * Math.abs(Math.sin(i * 0.9 + s) * Math.cos(i * 0.37))}%` }} />))}</div>;
   } else if (kind === "comet") {
     const l = `${frac * 100}%`;
-    body = <div className="cometbar"><i className="tail" style={{ width: l }} /><b className="knob" style={{ left: l }} /></div>;
+    body = <div className="cometbar"><i className="tail" style={{ width: l }} /><span className="dust" style={{ left: l }} /><b className="knob" style={{ left: l }} /></div>;
 } else {
     body = <div className="simplebar"><i style={{ width: `${frac * 100}%` }} /></div>;
   }

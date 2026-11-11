@@ -178,16 +178,6 @@ button,input{font:inherit;color:inherit}
 .pkt{min-width:0;display:flex;flex-direction:column}.pkt b,.pkt span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pkt span{color:var(--dim);font-size:13px}
 
 /* comet: thick track, fading tail with a moving sheen, big white knob. Bigger and glowing on hover. */
-.prog.comet{height:28px;overflow:visible}
-.cometbar{position:relative;width:calc(100% - 24px);margin:0 12px;height:6px;border-radius:4px;background:#ffffff14;transition:height .2s}
-.cometbar .tail{position:absolute;left:0;top:0;bottom:0;border-radius:4px;overflow:hidden;background:linear-gradient(90deg,transparent,#ffffff59 70%,#ffffff8c)}
-.cometbar .tail::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#ffffffb3,transparent) no-repeat;background-size:35% 100%;opacity:.45;animation:sweep 1.8s linear infinite}
-.cometbar .knob{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#fff;box-shadow:0 1px 6px #0006;transition:width .2s,height .2s,margin .2s,box-shadow .2s}
-.prog.comet:hover .cometbar{height:10px}.prog.comet:hover .tail::after{opacity:.9}
-.prog.comet:hover .knob{width:24px;height:24px;margin:-12px 0 0 -12px;box-shadow:0 0 0 5px #ffffff22,0 0 18px #ffffff8c;animation:glow 1.6s ease-in-out infinite}
-@keyframes sweep{from{background-position:-40% 0}to{background-position:140% 0}}
-@keyframes glow{0%,100%{box-shadow:0 0 0 5px #ffffff22,0 0 14px #ffffff70}50%{box-shadow:0 0 0 8px #ffffff1a,0 0 24px #ffffffa8}}
-@media (prefers-reduced-motion:reduce){.cometbar .tail::after,.prog.comet:hover .knob{animation:none}}
 /* settings: toggle + slider */
 .sr.inl{display:flex;justify-content:space-between;align-items:center;gap:16px}.sr.inl p{margin-bottom:0}
 .tg{flex:none;width:46px;height:26px;border-radius:13px;border:0;background:#ffffff26;position:relative;cursor:pointer;transition:background .2s}
@@ -207,3 +197,28 @@ button,input{font:inherit;color:inherit}
 .collapsed .mini{width:auto;left:0;right:0;text-align:center}
 .handle{position:absolute;inset:0;cursor:pointer}
 .island:has(.handle){opacity:.9}
+
+/* comet v2: lighter tail up to the knob, pixel dust behind it, everything pulses once a second */
+.prog.comet{height:30px;overflow:visible}
+.cometbar{position:relative;width:calc(100% - 24px);margin:0 12px;height:8px;border-radius:5px;background:#ffffff1f;transition:height .2s}
+.cometbar .tail{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:linear-gradient(90deg,#ffffff00,#ffffff47 35%,#ffffff8c);animation:tailpulse 1s ease-in-out infinite}
+.cometbar .dust{position:absolute;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -14px;background:#ffffffb0;
+  box-shadow:-9px -5px 0 #ffffff99,-16px 4px 0 #ffffff80,-24px -3px 0 #ffffff66,-31px 5px 0 #ffffff55,-40px -5px 0 #ffffff40,-50px 2px 0 #ffffff30;animation:dustpulse 1s ease-in-out infinite}
+.cometbar .knob{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#fff;box-shadow:0 1px 6px #0006;transition:width .2s,height .2s,margin .2s,box-shadow .2s}
+.prog.comet:hover .cometbar{height:12px}
+.prog.comet:hover .dust{margin-left:-20px}
+.prog.comet:hover .knob{width:24px;height:24px;margin:-12px 0 0 -12px;box-shadow:0 0 0 5px #ffffff22,0 0 18px #ffffff8c;animation:glow 1s ease-in-out infinite}
+@keyframes tailpulse{0%,100%{opacity:.7}50%{opacity:1}}
+@keyframes dustpulse{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.4;transform:translateX(-3px)}}
+@keyframes glow{0%,100%{box-shadow:0 0 0 5px #ffffff22,0 0 14px #ffffff70}50%{box-shadow:0 0 0 8px #ffffff1a,0 0 24px #ffffffa8}}
+@media (prefers-reduced-motion:reduce){.cometbar .tail,.cometbar .dust,.prog.comet:hover .knob{animation:none}}
+/* sliders: pointer cursor, dot on the mixer sliders, volume row on the music card */
+.vs,.hs,.prog{cursor:pointer}.hs.meter{cursor:default}
+.sr .rg input[type=range]::-webkit-slider-thumb{cursor:pointer}
+.hs{overflow:visible}.hs.meter{overflow:hidden}
+.knob2{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#fff;box-shadow:0 1px 6px #0006;pointer-events:none}
+.times{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
+.times>span:first-child{justify-self:start}.times>span:last-child{justify-self:end}
+.mv{display:flex;align-items:center;gap:10px}
+.mv button{background:none;border:0;color:var(--fg);cursor:pointer;display:grid;place-items:center;padding:0}
+.hs.mini{flex:none;width:190px;height:6px}

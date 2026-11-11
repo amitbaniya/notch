@@ -4,7 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ClipView, useClipHistory, Clip } from "./Clip";
 import { Shelf } from "./Shelf";
-import { AudioTab } from "./Audio";
+import { AudioTab, useAudio, useLive } from "./Audio";
+import { refreshBr } from "./cache";
 import { Controls } from "./Controls";
 import { Progress, Bar } from "./Progress";
 import { Settings } from "./Settings";
@@ -75,7 +76,27 @@ function Music({ m, at, art, bar }: { m: Media; at: number; art: string; bar: Ba
         <button onClick={() => c("next")} aria-label="Next"><I n="next" s={24} fill /></button>
       </div>
       <Progress kind={bar} frac={f} seed={m.title} onSeek={(x) => { if (m.dur) { jump(x * m.dur); c(`seek:${x * m.dur}`); } }} />
-      <div className="times"><span>{mmss(pos)}</span><span>-{mmss(m.dur - pos)}</span></div>
+      <div className="times"><span>{mmss(pos)}</span><MiniVol /><span>-{mmss(m.dur - pos)}</span></div>
+    </div>
+  );
+}
+
+function MiniVol() {
+  const [a, setA] = useAudio(1500);
+  const live = useLive("set_out_vol", (n) => ({ v: n / 100 }));
+  const [v, setV] = useState(0);
+  const drag = useRef(false), ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (a && !drag.current) setV(Math.round(a.out_vol * 100)); }, [a]);
+  const f = (e: React.PointerEvent) => { const r = ref.current!.getBoundingClientRect(); return Math.round(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * 100); };
+  const muted = !!a?.out_mute;
+  return (
+    <div className="mv">
+      <button onClick={() => { if (a) { setA({ ...a, out_mute: !muted }); invoke("set_mute", { mic: false, m: !muted }); } }} aria-label="Mute"><I n={muted ? "volumeOff" : "volume"} s={20} /></button>
+      <div ref={ref} className="hs mini" onPointerDown={(e) => { drag.current = true; e.currentTarget.setPointerCapture(e.pointerId); const n = f(e); setV(n); live(n); }}
+        onPointerMove={(e) => { if (e.buttons) { const n = f(e); setV(n); live(n); } }} onPointerUp={(e) => { drag.current = false; live(f(e)); }}
+        onWheel={(e) => { const n = Math.max(0, Math.min(100, v + (e.deltaY < 0 ? 3 : -3))); setV(n); live(n); }}>
+        <i style={{ width: `${muted ? 0 : v}%` }} />
+      </div>
     </div>
   );
 }
@@ -179,6 +200,7 @@ export default function App() {
     const cw = disabled ? 76 : hud ? 660 : dot ? 44 : full ? 300 : 230, ch = disabled ? 9 : 56;
     invoke("set_expanded", { v: open, cw: Math.round(cw * sn), ch: Math.round(ch * sn), top: Math.round((float ? 10 : 0) * so), s: so });
   }, [open, hud, dot, full, float, disabled, cfg.sizeNotch, cfg.sizeOpen]);
+  useEffect(() => { refreshBr().catch(() => {}); }, []); // warm the brightness cache so Controls opens instantly
   useEffect(() => save("disabled", disabled), [disabled]);
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   useEffect(() => { // global shortcut (Ctrl+Alt+N) from Rust

@@ -44,7 +44,8 @@ function Row({ icon, label, value, muted, live, mute, mIcon, meter }: {
       {live ? (
         <div ref={ref} className="hs" onPointerDown={(e) => { drag.current = true; e.currentTarget.setPointerCapture(e.pointerId); const n = f(e); setV(n); live(n); }}
           onPointerMove={(e) => { if (e.buttons) { const n = f(e); setV(n); live(n); } }}
-          onPointerUp={(e) => { drag.current = false; live(f(e)); }}><i style={{ width: `${muted ? 0 : v}%` }} /></div>
+          onPointerUp={(e) => { drag.current = false; live(f(e)); }}
+          onWheel={(e) => { const n = Math.max(0, Math.min(100, v + (e.deltaY < 0 ? 3 : -3))); setV(n); live(n); }}><i style={{ width: `${muted ? 0 : v}%` }} /><b className="knob2" style={{ left: `${muted ? 0 : v}%` }} /></div>
       ) : <div className="hs meter"><i style={{ width: `${(meter ?? 0) * 100}%` }} /></div>}
       <span className="mp">{live ? `${muted ? 0 : v}%` : ""}</span>
       <button className="mb" onClick={mute} aria-label="Mute">{mIcon}</button>
