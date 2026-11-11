@@ -23,12 +23,12 @@ const appName = (raw: string) => {
   const last = raw.split("!")[0].replace(/\.exe$/i, "").split("_")[0].split(".").filter(Boolean).pop() || raw;
   return last.charAt(0).toUpperCase() + last.slice(1);
 };
-const hue = (s: string) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % 360;
+export const hue = (s: string) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % 360;
 const ago = (t: number) => { const s = (Date.now() - t) / 1000; return s < 60 ? "now" : s < 3600 ? `${Math.round(s / 60)}m` : s < 86400 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 86400)}d`; };
 
-function Row({ label, title, body, at, unread, extra }: { label: string; title: string; body: string; at: number; unread?: boolean; extra?: string }) {
+function Row({ label, title, body, at, unread, extra, onClick }: { label: string; title: string; body: string; at: number; unread?: boolean; extra?: string; onClick?: () => void }) {
   return (
-    <div className="nr">
+    <div className="nr" onClick={onClick} style={onClick ? { cursor: "pointer" } : undefined}>
       {unread && <i className="dotu" />}
       <span className="nri" style={{ background: `hsl(${hue(label)} 60% 45%)` }}>{label.charAt(0)}</span>
       <div className="nrb">
@@ -70,7 +70,7 @@ export function ChatView({ on, setOn, items }: { on: boolean; setOn: (b: boolean
   return (
     <div className="nf">
       <div className="nfl">
-        {list.length ? list.map(({ n, count }) => <Row key={n.id} label={service(n)} title={n.title} body={n.body} at={n.at} extra={count > 1 ? `×${count}` : ""} />)
+        {list.length ? list.map(({ n, count }) => <Row key={n.id} label={service(n)} title={n.title} body={n.body} at={n.at} extra={count > 1 ? `×${count}` : ""} onClick={() => invoke("open_chat", { service: service(n) })} />)
           : <div className="empty">Running. New chat messages will show up here.</div>}
       </div>
       <div className="nff"><span>Chat overlay is running</span><button onClick={() => setOn(false)}>Stop</button></div>

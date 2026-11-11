@@ -412,12 +412,51 @@ fn toast_texts(xml: &str) -> Vec<String> {
     v
 }
 
+// Bubble column at the bottom-right. The window stays "shown" and is parked off-screen when empty,
+// so it never steals keyboard focus from whatever you're typing in.
+#[tauri::command]
+async fn set_bubbles(app: tauri::AppHandle, n: u32) {
+    let Some(w) = app.get_webview_window("bubbles") else { return };
+    if n == 0 { let _ = w.set_position(PhysicalPosition::new(-10000, -10000)); return; }
+    let h = n.min(4) as f64 * 66.0 + 24.0;
+    let _ = w.set_size(tauri::LogicalSize::new(84.0, h));
+    if let Ok(Some(mon)) = w.primary_monitor() {
+        let sf = mon.scale_factor();
+        let x = mon.position().x as f64 + mon.size().width as f64 - (84.0 + 12.0) * sf;
+        let y = mon.position().y as f64 + mon.size().height as f64 - (h + 64.0) * sf; // 64px clears a bottom taskbar
+        let _ = w.set_position(PhysicalPosition::new(x as i32, y as i32));
+    }
+}
+
+// Quick chat: a compact always-on-top window with the service's web client (stays signed in).
+#[tauri::command]
+async fn open_chat(app: tauri::AppHandle, service: String) {
+    let (label, url) = match service.as_str() {
+        "WhatsApp" => ("chat-whatsapp", "https://web.whatsapp.com"),
+        "Instagram" => ("chat-instagram", "https://www.instagram.com/direct/inbox/"),
+        "Messenger" => ("chat-messenger", "https://www.messenger.com"),
+        "Telegram" => ("chat-telegram", "https://web.telegram.org/a/"),
+        "Discord" => ("chat-discord", "https://discord.com/channels/@me"),
+        _ => return,
+    };
+    if let Some(w) = app.get_webview_window(label) { let _ = w.show(); let _ = w.set_focus(); return; }
+    let (mut x, mut y) = (100.0, 100.0);
+    if let Ok(Some(mon)) = app.primary_monitor() {
+        let sf = mon.scale_factor();
+        x = mon.position().x as f64 / sf + mon.size().width as f64 / sf - 420.0 - 110.0;
+        y = mon.position().y as f64 / sf + mon.size().height as f64 / sf - 640.0 - 64.0;
+    }
+    let Ok(u) = url.parse::<tauri::Url>() else { return };
+    let _ = tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::External(u))
+        .title(service).inner_size(420.0, 640.0).position(x.max(0.0), y.max(0.0)).always_on_top(true).build();
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Expanded(Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(280)), Arc::new(AtomicU32::new(0))))
         .manage(Arc::new(Share::default()))
-        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications])
+        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, set_bubbles, open_chat])
         .setup(|app| {
             let win = app.get_webview_window("main").unwrap();
             if let Ok(Some(mon)) = win.primary_monitor() {

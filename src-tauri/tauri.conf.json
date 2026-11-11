@@ -3,11 +3,55 @@
   "productName": "Notch",
   "version": "0.1.0",
   "identifier": "dev.amit.notch",
-  "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
-  "app": {
-    "windows": [{ "label": "main", "title": "Notch", "width": 720, "height": 340, "decorations": false, "transparent": true,
-      "alwaysOnTop": true, "skipTaskbar": true, "resizable": false, "shadow": false, "focus": false }],
-    "security": { "csp": null }
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
   },
-  "bundle": { "active": true, "targets": ["nsis"], "icon": ["icons/icon.ico"] }
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Notch",
+        "width": 720,
+        "height": 340,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "focus": false
+      },
+      {
+        "label": "bubbles",
+        "title": "Notch bubbles",
+        "url": "index.html#bubbles",
+        "width": 84,
+        "height": 100,
+        "x": -10000,
+        "y": -10000,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "focus": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.ico"
+    ]
+  }
 }

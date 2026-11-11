@@ -1,1 +1,13 @@
-{ "identifier": "default", "windows": ["main"], "permissions": ["core:default", "clipboard-manager:allow-read-text", "clipboard-manager:allow-write-text", "clipboard-manager:allow-read-image"] }
+{
+  "identifier": "default",
+  "windows": [
+    "main",
+    "bubbles"
+  ],
+  "permissions": [
+    "core:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-image"
+  ]
+}
