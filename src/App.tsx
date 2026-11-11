@@ -5,11 +5,13 @@ import { listen } from "@tauri-apps/api/event";
 import { ClipView, useClipHistory, Clip } from "./Clip";
 import { Shelf } from "./Shelf";
 import { Call } from "./Call";
+import { Progress, Bar } from "./Progress";
+import { Settings } from "./Settings";
+import type { Cfg } from "./types";
 import { Controls } from "./Controls";
 
 type Media = { title: string; artist: string; playing: boolean; active: boolean; pos: number; dur: number };
 type Tab = "music" | "sites" | "notify" | "chat" | "shelf" | "clip" | "widgets" | "controls" | "tools" | "call" | "settings";
-type Cfg = { city: string; tz: string; accent: string; style: "pill" | "full" | "dot" };
 type Item = { t: string; d: boolean };
 
 const SPRING = { type: "spring", stiffness: 320, damping: 30, mass: 0.9 } as const;
@@ -30,7 +32,6 @@ const TABS = Object.keys(ICONS) as Tab[];
 const SOON: Partial<Record<Tab, string>> = {
   sites: "Sites arrive in phase 4", notify: "Notifications arrive in phase 4",
 };
-const ACCENTS = ["#ffb38a", "#8ab4ff", "#9be58f", "#ff8fb1", "#e6d36e"];
 
 const load = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
@@ -50,11 +51,10 @@ const avgColor = (src: string) => new Promise<string>((res) => {
   im.onerror = () => res(""); im.src = src;
 });
 
-function Music({ m, art, pos }: { m: Media; art: string; pos: number }) {
+function Music({ m, art, pos, bar }: { m: Media; art: string; pos: number; bar: Bar }) {
   const c = (a: string) => invoke("media_control", { action: a });
   if (!m.active) return <div className="empty">Nothing playing. Start music in any app.</div>;
-  const W = 520, f = m.dur ? Math.min(1, pos / m.dur) : 0, x = f * W;
-  let d = ""; for (let i = 0; i <= x; i += 3) d += `${i ? "L" : "M"}${i} ${8 + 3 * Math.sin(i / 4)}`;
+  const f = m.dur ? Math.min(1, pos / m.dur) : 0;
   return (
     <div className="music">
       <div className="art">{art ? <img src={art} alt="" /> : <span>♪</span>}</div>
@@ -64,11 +64,7 @@ function Music({ m, art, pos }: { m: Media; art: string; pos: number }) {
         <button className="big" onClick={() => c("toggle")} aria-label="Play or pause">{m.playing ? "⏸" : "▶"}</button>
         <button onClick={() => c("next")} aria-label="Next">⏭</button>
       </div>
-      <svg className="wave" viewBox={`0 0 ${W} 16`} preserveAspectRatio="none"
-        onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); if (m.dur) c(`seek:${((e.clientX - r.left) / r.width) * m.dur}`); }}>
-        <path d={`M${x} 8L${W} 8`} stroke="#ffffff30" strokeWidth="3" strokeLinecap="round" />
-        <path d={d || "M0 8"} stroke="var(--accent)" strokeWidth="3" fill="none" strokeLinecap="round" />
-      </svg>
+      <Progress kind={bar} frac={f} seed={m.title} onSeek={(x) => m.dur && c(`seek:${x * m.dur}`)} />
       <div className="times"><span>{mmss(pos)}</span><span>-{mmss(m.dur - pos)}</span></div>
     </div>
   );
@@ -144,23 +140,10 @@ function Tools() {
   );
 }
 
-function Settings({ cfg, set }: { cfg: Cfg; set: (c: Cfg) => void }) {
-  const [city, setCity] = useState(cfg.city), [tz, setTz] = useState(cfg.tz);
-  const commit = () => set({ ...cfg, city: city.trim() || cfg.city, tz: tz.trim() || cfg.tz });
-  return (
-    <div className="settings">
-      <label>Weather city<input value={city} onChange={(e) => setCity(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} /></label>
-      <label>Second clock (IANA zone)<input value={tz} onChange={(e) => setTz(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} /></label>
-      <div className="sw st">{(["pill", "full", "dot"] as const).map((s) => <button key={s} style={{ outline: s === cfg.style ? "2px solid var(--accent)" : "none" }} onClick={() => set({ ...cfg, style: s })}>{{ pill: "Notch", full: "Full pill", dot: "Hole punch" }[s]}</button>)}</div>
-      <div className="sw">{ACCENTS.map((a) => <button key={a} aria-label={a} style={{ background: a, outline: a === cfg.accent ? "2px solid #fff" : "none" }} onClick={() => set({ ...cfg, accent: a })} />)}</div>
-    </div>
-  );
-}
-
 export default function App() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("music");
-  const [cfg, setCfg] = useState<Cfg>(() => ({ city: "London", tz: "Asia/Tokyo", accent: ACCENTS[0], style: "pill", ...load<Partial<Cfg>>("cfg", {}) }));
+  const [cfg, setCfg] = useState<Cfg>(() => ({ city: "London", tz: "Asia/Tokyo", style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", ...load<Partial<Cfg>>("cfg", {}) }));
   const [m, setM] = useState<Media>({ title: "", artist: "", playing: false, active: false, pos: 0, dur: 0 });
   const [at, setAt] = useState(Date.now());
   const [art, setArt] = useState(""); const [col, setCol] = useState("");
@@ -170,7 +153,7 @@ export default function App() {
   const [shelf, setShelf] = useState<string[]>(() => load("shelf", []));
   const t = useRef<number>();
 
-  useEffect(() => { save("cfg", cfg); document.documentElement.style.setProperty("--accent", cfg.accent); }, [cfg]);
+  useEffect(() => { save("cfg", cfg); document.documentElement.dataset.surface = cfg.surface; }, [cfg]);
   useEffect(() => {
     const un = listen<boolean>("hover", (e) => { clearTimeout(t.current); t.current = window.setTimeout(() => setOpen(e.payload), e.payload ? 120 : 300); });
     return () => { un.then((f) => f()); };
@@ -199,7 +182,7 @@ export default function App() {
   const dot = cfg.style === "dot", full = cfg.style === "full";
   const pos = Math.min(m.dur || Infinity, m.pos + (m.playing ? (Date.now() - at) / 1000 : 0));
   let body: JSX.Element;
-  if (tab === "music") body = <Music m={m} art={art} pos={pos} />;
+  if (tab === "music") body = <Music m={m} art={art} pos={pos} bar={cfg.bar} />;
   else if (tab === "widgets") body = <Widgets cfg={cfg} />;
   else if (tab === "tools") body = <Tools />;
   else if (tab === "settings") body = <Settings cfg={cfg} set={setCfg} />;
@@ -216,11 +199,11 @@ export default function App() {
     <motion.div className="island" initial={false}
       animate={{ width: open ? 640 : dot ? 34 : full ? 360 : 280, height: open ? 270 : full ? 44 : 34, marginTop: !open && dot ? 6 : !open && full ? 8 : 0, borderTopLeftRadius: !open && (dot || full) ? (dot ? 17 : 22) : 0, borderTopRightRadius: !open && (dot || full) ? (dot ? 17 : 22) : 0, borderBottomLeftRadius: open ? 34 : dot ? 17 : full ? 22 : 18, borderBottomRightRadius: open ? 34 : dot ? 17 : full ? 22 : 18 }}
       transition={SPRING}>
-      <div className="glow" style={{ "--art": col || "transparent", opacity: col && ((open && tab === "music") || (!open && full)) ? 0.55 : 0 } as CSSProperties} />
+      <div className="glow" style={{ "--art": col || "transparent", opacity: col && cfg.bg === "album" && ((open && tab === "music") || (!open && full)) ? 0.55 : 0 } as CSSProperties} />
       {!open && (
         <div className={"collapsed" + (dot ? " dot" : full ? " full" : "")}>
           {!dot && (art ? <img src={art} alt="" /> : <span />)}
-          {m.playing && <div className="bars"><i /><i /><i /><i /></div>}
+          {m.playing && <div className={"bars" + (cfg.viz === "pixels" ? " px" : "")}><i /><i /><i /><i /></div>}
         </div>
       )}
       <AnimatePresence>
