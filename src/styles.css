@@ -198,20 +198,16 @@ button,input{font:inherit;color:inherit}
 .handle{position:absolute;inset:0;cursor:pointer}
 .island:has(.handle){opacity:.9}
 
-/* comet v2: lighter tail up to the knob, pixel dust behind it, everything pulses once a second */
+/* comet v2: lighter tail up to the knob; tail and knob pulse once a second */
 .prog.comet{height:30px;overflow:visible}
 .cometbar{position:relative;width:calc(100% - 24px);margin:0 12px;height:8px;border-radius:5px;background:#ffffff1f;transition:height .2s}
 .cometbar .tail{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:linear-gradient(90deg,#ffffff00,#ffffff47 35%,#ffffff8c);animation:tailpulse 1s ease-in-out infinite}
-.cometbar .dust{position:absolute;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -14px;background:#ffffffb0;
-  box-shadow:-9px -5px 0 #ffffff99,-16px 4px 0 #ffffff80,-24px -3px 0 #ffffff66,-31px 5px 0 #ffffff55,-40px -5px 0 #ffffff40,-50px 2px 0 #ffffff30;animation:dustpulse 1s ease-in-out infinite}
 .cometbar .knob{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#fff;box-shadow:0 1px 6px #0006;transition:width .2s,height .2s,margin .2s,box-shadow .2s}
 .prog.comet:hover .cometbar{height:12px}
-.prog.comet:hover .dust{margin-left:-20px}
 .prog.comet:hover .knob{width:24px;height:24px;margin:-12px 0 0 -12px;box-shadow:0 0 0 5px #ffffff22,0 0 18px #ffffff8c;animation:glow 1s ease-in-out infinite}
 @keyframes tailpulse{0%,100%{opacity:.7}50%{opacity:1}}
-@keyframes dustpulse{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.4;transform:translateX(-3px)}}
 @keyframes glow{0%,100%{box-shadow:0 0 0 5px #ffffff22,0 0 14px #ffffff70}50%{box-shadow:0 0 0 8px #ffffff1a,0 0 24px #ffffffa8}}
-@media (prefers-reduced-motion:reduce){.cometbar .tail,.cometbar .dust,.prog.comet:hover .knob{animation:none}}
+@media (prefers-reduced-motion:reduce){.cometbar .tail,.prog.comet:hover .knob{animation:none}}
 /* sliders: pointer cursor, dot on the mixer sliders, volume row on the music card */
 .vs,.hs,.prog{cursor:pointer}.hs.meter{cursor:default}
 .sr .rg input[type=range]::-webkit-slider-thumb{cursor:pointer}
@@ -222,3 +218,8 @@ button,input{font:inherit;color:inherit}
 .mv{display:flex;align-items:center;gap:10px}
 .mv button{background:none;border:0;color:var(--fg);cursor:pointer;display:grid;place-items:center;padding:0}
 .hs.mini{flex:none;width:190px;height:6px}
+
+.mv{position:relative;z-index:5;gap:8px}
+.hs.mini{position:relative;width:170px;height:6px;margin:0}
+.hs.mini::before{content:"";position:absolute;left:-6px;right:-6px;top:-11px;bottom:-11px}
+.times{position:relative;z-index:5}
