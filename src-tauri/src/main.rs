@@ -566,6 +566,9 @@ fn stats_loop(app: tauri::AppHandle, want: Arc<AtomicBool>) {
     { let _ = (app, want); }
 }
 
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) { app.exit(0); }
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -576,7 +579,7 @@ fn main() {
         .manage(Expanded(Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(280)), Arc::new(AtomicU32::new(0)), Arc::new(AtomicU32::new(100)), Arc::new(AtomicU32::new(56)), Arc::new(AtomicI32::new(0))))
         .manage(Arc::new(Share::default()))
         .manage(HudWant(Arc::new(AtomicBool::new(false))))
-        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, get_sessions, set_app_volume, set_app_mute, set_hud_want])
+        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, get_sessions, set_app_volume, set_app_mute, set_hud_want, quit_app])
         .setup(|app| {
             let win = app.get_webview_window("main").unwrap();
             if let Ok(Some(mon)) = win.primary_monitor() {
@@ -615,6 +618,12 @@ fn main() {
             let (h2, want) = (app.handle().clone(), app.state::<HudWant>().0.clone());
             std::thread::spawn(move || stats_loop(h2, want));
             Ok(())
+        })
+        // Alt+F4 (or any close request) must not quit the main island; Settings > Quit exits instead. Site windows close normally.
+        .on_window_event(|window, event| {
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event { api.prevent_close(); }
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running Notch");

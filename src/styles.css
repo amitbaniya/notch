@@ -237,3 +237,5 @@ button,input{font:inherit;color:inherit}
 .vr::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(90deg,#ffffffd9 var(--v,50%),#ffffff33 var(--v,50%))}
 .vr::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-4px;border-radius:50%;background:#fff;box-shadow:0 1px 5px #0006;opacity:0;transition:opacity .15s}
 .vr:hover::-webkit-slider-thumb,.vr:active::-webkit-slider-thumb{opacity:1}
+
+.qbtn{flex:none;background:#ff453a33;border:0;color:#fff;border-radius:16px;padding:7px 16px;cursor:pointer}.qbtn:hover{background:#ff453a66}

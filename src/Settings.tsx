@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { isEnabled, enable, disable } from "@tauri-apps/plugin-autostart";
+import { invoke } from "@tauri-apps/api/core";
 import type { Cfg } from "./types";
 
 function Seg<T extends string>({ v, opts, set }: { v: T; opts: [T, string][]; set: (v: T) => void }) {
@@ -24,6 +25,7 @@ const Toggle = ({ on, set, label }: { on: boolean; set: () => void; label: strin
 export function Settings({ cfg, set, enabled, setEnabled }: { cfg: Cfg; set: (c: Cfg) => void; enabled: boolean; setEnabled: (b: boolean) => void }) {
   const up = <K extends keyof Cfg>(k: K) => (v: Cfg[K]) => set({ ...cfg, [k]: v });
   const [auto, setAuto] = useState(false);
+  const [sure, setSure] = useState(false);
   useEffect(() => { isEnabled().then(setAuto).catch(() => {}); }, []);
   const toggleAuto = async () => { try { if (auto) await disable(); else await enable(); setAuto(!auto); } catch {} };
   return (
@@ -31,6 +33,9 @@ export function Settings({ cfg, set, enabled, setEnabled }: { cfg: Cfg; set: (c:
       <div className="sh">GENERAL</div>
       <Row inline title="Show island" desc="Shortcut: Ctrl+Alt+N. When off, only a small handle stays at the top edge; click it to bring the island back."><Toggle on={enabled} set={() => setEnabled(!enabled)} label="Show island" /></Row>
       <Row inline title="Open at startup" desc="Start Notch when you sign in to Windows."><Toggle on={auto} set={toggleAuto} label="Open at startup" /></Row>
+      <Row inline title="Quit Notch" desc="Alt+F4 is blocked so you can't close Notch by accident. Use this to exit.">
+        <button className="qbtn" onClick={() => { if (sure) invoke("quit_app"); else { setSure(true); setTimeout(() => setSure(false), 3000); } }}>{sure ? "Click again to quit" : "Quit"}</button>
+      </Row>
       <div className="sh" style={{ marginTop: 8 }}>APPEARANCE</div>
       <Row title="Shape" desc="A floating island under the top edge, a notch that hangs from it, or a small hole punch.">
         <Seg v={cfg.style} set={up("style")} opts={[["full", "Island"], ["pill", "Notch"], ["dot", "Hole punch"]]} />
