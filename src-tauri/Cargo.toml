@@ -14,7 +14,7 @@ serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
 clipboard-win = "5"
-windows = { version = "0.58", features = ["Media_Control", "Foundation", "Foundation_Collections", "Storage_Streams", "Devices_Radios", "Win32_Foundation", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.58", features = ["Media_Control", "Foundation", "Foundation_Collections", "Storage_Streams", "Devices_Radios", "Win32_Foundation", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com"] }
 
 [profile.release]
 opt-level = "s"

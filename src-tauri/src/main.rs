@@ -231,9 +231,9 @@ async fn set_mute(mic: bool, m: bool) {
 }
 
 #[tauri::command]
-fn test_sound() {
+async fn test_sound() {
     #[cfg(windows)]
-    unsafe { let _ = windows::Win32::UI::WindowsAndMessaging::MessageBeep(windows::Win32::UI::WindowsAndMessaging::MB_OK); }
+    { run("powershell", &["-NoProfile", "-Command", "[System.Media.SystemSounds]::Asterisk.Play(); Start-Sleep -Milliseconds 800"]); }
 }
 
 #[derive(Serialize, Default)]
