@@ -19,7 +19,6 @@ type Tab = "music" | "sites" | "notify" | "shelf" | "clip" | "controls" | "tools
 
 const SPRING = { type: "spring", stiffness: 320, damping: 30, mass: 0.9 } as const;
 const TABS: [Tab, IconName][] = [["music", "music"], ["sites", "globe"], ["notify", "bell"], ["shelf", "folder"], ["clip", "clip"], ["controls", "sliders"], ["tools", "grid"], ["audio", "headphones"], ["settings", "gear"]];
-const GLASS = { glass: "58%", clear: "34%", solid: "96%" };
 
 const load = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
@@ -36,24 +35,28 @@ const avgColor = (src: string) => new Promise<string>((res) => {
   im.onerror = () => res(""); im.src = src;
 });
 
+// The player reports a position that can be stale, so we never jump or run backwards: a small error is
+// absorbed by nudging the playback rate (0.7x-1.3x); only a seek or a new track snaps the bar.
 function useSmoothPos(m: Media, at: number) {
-  const base = useRef({ pos: 0, t: Date.now(), title: "", until: 0 });
+  const base = useRef({ pos: 0, t: Date.now(), rate: 1, title: "", until: 0 });
   const [pos, setPos] = useState(0);
   useEffect(() => {
-    const b = base.current, now = Date.now();
-    if (now < b.until) return;
-    const predicted = b.pos + (m.playing ? (now - b.t) / 1000 : 0);
-    if (!m.playing || m.title !== b.title || Math.abs(m.pos - predicted) > 2.5) base.current = { pos: m.pos, t: at, title: m.title, until: 0 };
+    const b = base.current, n = Date.now();
+    if (n < b.until) return;
+    const predicted = b.pos + (m.playing ? ((n - b.t) / 1000) * b.rate : 0);
+    const err = m.pos - predicted;
+    if (!m.playing || m.title !== b.title || Math.abs(err) > 1.5) base.current = { pos: m.pos, t: n, rate: 1, title: m.title, until: 0 };
+    else base.current = { pos: predicted, t: n, rate: Math.min(1.3, Math.max(0.7, 1 + err * 0.3)), title: m.title, until: 0 };
   }, [m.pos, m.playing, m.title, at]);
   useEffect(() => {
-    const read = () => Math.min(m.dur || Infinity, base.current.pos + (m.playing ? (Date.now() - base.current.t) / 1000 : 0));
+    const read = () => Math.min(m.dur || Infinity, base.current.pos + (m.playing ? ((Date.now() - base.current.t) / 1000) * base.current.rate : 0));
     if (!m.playing) { setPos(read()); return; }
     let raf = 0;
     const loop = () => { setPos(read()); raf = requestAnimationFrame(loop); };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, [m.playing, m.dur, m.pos, m.title, at]);
-  const jump = (s: number) => { base.current = { pos: s, t: Date.now(), title: m.title, until: Date.now() + 1500 }; setPos(s); };
+  const jump = (s: number) => { base.current = { pos: s, t: Date.now(), rate: 1, title: m.title, until: Date.now() + 1500 }; setPos(s); };
   return [pos, jump] as const;
 }
 
@@ -119,7 +122,7 @@ function Hud({ s }: { s: Stats | null }) {
 export default function App() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("music");
-  const [cfg, setCfg] = useState<Cfg>(() => ({ style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", glass: "glass", hud: "auto", peek: "on", ...load<Partial<Cfg>>("cfg", {}) }));
+  const [cfg, setCfg] = useState<Cfg>(() => ({ style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, hud: "auto", peek: "on", ...load<Partial<Cfg>>("cfg", {}) }));
   const [m, setM] = useState<Media>({ title: "", artist: "", playing: false, active: false, pos: 0, dur: 0 });
   const [at, setAt] = useState(Date.now());
   const [art, setArt] = useState(""); const [col, setCol] = useState("");
@@ -139,7 +142,7 @@ export default function App() {
 
   useEffect(() => {
     save("cfg", cfg);
-    const r = document.documentElement; r.dataset.surface = cfg.surface; r.style.setProperty("--ap", GLASS[cfg.glass]);
+    const r = document.documentElement; r.dataset.surface = cfg.surface; r.style.setProperty("--ap", `${100 - cfg.see}%`);
   }, [cfg]);
   useEffect(() => {
     const un = listen<boolean>("hover", (e) => { clearTimeout(t.current); t.current = window.setTimeout(() => setOpen(e.payload), e.payload ? 120 : 300); });

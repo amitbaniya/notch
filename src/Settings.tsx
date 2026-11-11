@@ -1,23 +1,38 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
+import { isEnabled, enable, disable } from "@tauri-apps/plugin-autostart";
 import type { Cfg } from "./types";
 
 function Seg<T extends string>({ v, opts, set }: { v: T; opts: [T, string][]; set: (v: T) => void }) {
   return <div className="seg2">{opts.map(([k, l]) => <button key={k} className={k === v ? "on" : ""} onClick={() => set(k)}>{l}</button>)}</div>;
 }
-const Row = ({ title, desc, children }: { title: string; desc?: string; children: ReactNode }) => (
-  <div className="sr"><b>{title}</b>{desc && <p>{desc}</p>}{children}</div>
+const Row = ({ title, desc, children, inline }: { title: string; desc?: string; children: ReactNode; inline?: boolean }) => (
+  inline
+    ? <div className="sr inl"><div><b>{title}</b>{desc && <p>{desc}</p>}</div>{children}</div>
+    : <div className="sr"><b>{title}</b>{desc && <p>{desc}</p>}{children}</div>
+);
+const Toggle = ({ on, set, label }: { on: boolean; set: () => void; label: string }) => (
+  <button role="switch" aria-checked={on} aria-label={label} className={"tg" + (on ? " on" : "")} onClick={set}><i /></button>
 );
 
 export function Settings({ cfg, set }: { cfg: Cfg; set: (c: Cfg) => void }) {
   const up = <K extends keyof Cfg>(k: K) => (v: Cfg[K]) => set({ ...cfg, [k]: v });
+  const [auto, setAuto] = useState(false);
+  useEffect(() => { isEnabled().then(setAuto).catch(() => {}); }, []);
+  const toggleAuto = async () => { try { if (auto) await disable(); else await enable(); setAuto(!auto); } catch {} };
   return (
     <div className="set">
-      <div className="sh">APPEARANCE</div>
+      <div className="sh">GENERAL</div>
+      <Row inline title="Open at startup" desc="Start Notch when you sign in to Windows."><Toggle on={auto} set={toggleAuto} label="Open at startup" /></Row>
+      <div className="sh" style={{ marginTop: 8 }}>APPEARANCE</div>
       <Row title="Shape" desc="A floating island under the top edge, a notch that hangs from it, or a small hole punch.">
         <Seg v={cfg.style} set={up("style")} opts={[["full", "Island"], ["pill", "Notch"], ["dot", "Hole punch"]]} />
       </Row>
-      <Row title="Glass" desc="How see-through the island is. Clear shows the most of what's behind it.">
-        <Seg v={cfg.glass} set={up("glass")} opts={[["clear", "Clear"], ["glass", "Glass"], ["solid", "Solid"]]} />
+      <Row title="Transparency" desc="Slide right to see more of what's behind the island.">
+        <div className="rg">
+          <input type="range" min={0} max={85} value={cfg.see} style={{ "--v": `${(cfg.see / 85) * 100}%` } as React.CSSProperties}
+            onChange={(e) => up("see")(Number(e.target.value))} aria-label="Transparency" />
+          <span className="mp">{cfg.see}%</span>
+        </div>
       </Row>
       <Row title="Surface" desc="The island's tint. Each theme brings its own accent and edge.">
         <Seg v={cfg.surface} set={up("surface")} opts={[["black", "Black"], ["graphite", "Graphite"], ["rose", "Rosé"], ["lavender", "Lavender"], ["peach", "Peach"], ["sakura", "Sakura"]]} />

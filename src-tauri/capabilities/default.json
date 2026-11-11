@@ -7,6 +7,9 @@
     "core:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
-    "clipboard-manager:allow-read-image"
+    "clipboard-manager:allow-read-image",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
   ]
 }

@@ -26,8 +26,16 @@ async fn get_media() -> Media {
             let p = s.TryGetMediaPropertiesAsync()?.get()?;
             let playing = s.GetPlaybackInfo()?.PlaybackStatus()? == St::Playing;
             let tl = s.GetTimelineProperties()?;
-            let pos = tl.Position()?.Duration as f64 / 1e7;
+            let mut pos = tl.Position()?.Duration as f64 / 1e7;
             let dur = (tl.EndTime()?.Duration - tl.StartTime()?.Duration) as f64 / 1e7;
+            if playing {
+                // The reported position is as of LastUpdatedTime, not now: add the time since then.
+                let last = tl.LastUpdatedTime()?.UniversalTime as f64 / 1e7 - 11_644_473_600.0;
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+                let age = now - last;
+                if (0.0..15.0).contains(&age) { pos += age; }
+                if dur > 0.0 { pos = pos.min(dur); }
+            }
             Ok(Media { title: p.Title()?.to_string(), artist: p.Artist()?.to_string(), playing, active: true, pos, dur })
         })();
         return r.unwrap_or_default();
@@ -556,6 +564,7 @@ fn stats_loop(app: tauri::AppHandle, want: Arc<AtomicBool>) {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(Expanded(Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(280)), Arc::new(AtomicU32::new(0))))
         .manage(Arc::new(Share::default()))
         .manage(HudWant(Arc::new(AtomicBool::new(false))))

@@ -6,6 +6,7 @@
   "scripts": { "dev": "vite", "build": "tsc && vite build", "tauri": "tauri" },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-autostart": "^2.0.0",
     "@tauri-apps/plugin-clipboard-manager": "^2.0.0",
     "motion": "^11.11.0",
     "qrcode": "^1.5.4",

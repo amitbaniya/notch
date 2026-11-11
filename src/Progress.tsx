@@ -24,10 +24,10 @@ export function Progress({ kind, frac, seed, onSeek }: { kind: Bar; frac: number
     body = <div className="song">{Array.from({ length: 48 }, (_, i) => (
       <i key={i} className={i < frac * 48 ? "on" : ""} style={{ height: `${30 + 70 * Math.abs(Math.sin(i * 0.9 + s) * Math.cos(i * 0.37))}%` }} />))}</div>;
   } else if (kind === "comet") {
-    const l = { left: `${frac * 100}%` };
-    body = <div className="cometbar"><i style={{ width: `${frac * 100}%` }} /><span className="t t3" style={l} /><span className="t t2" style={l} /><span className="t t1" style={l} /><b style={l} /></div>;
-  } else {
+    const l = `${frac * 100}%`;
+    body = <div className="cometbar"><i className="tail" style={{ width: l }} /><b className="knob" style={{ left: l }} /></div>;
+} else {
     body = <div className="simplebar"><i style={{ width: `${frac * 100}%` }} /></div>;
   }
-  return <div className="prog" onClick={click}>{body}</div>;
+  return <div className={"prog" + (kind === "comet" ? " comet" : "")} onClick={click}>{body}</div>;
 }
