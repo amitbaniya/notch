@@ -7,6 +7,8 @@ import { Shelf } from "./Shelf";
 import { Call } from "./Call";
 import { Progress, Bar } from "./Progress";
 import { Settings } from "./Settings";
+import { Sites } from "./Sites";
+import { Notifications, ChatView, useNotifs, isChat } from "./Notifs";
 import type { Cfg } from "./types";
 import { Controls } from "./Controls";
 
@@ -30,7 +32,6 @@ const ICONS: Record<Tab, string> = {
 };
 const TABS = Object.keys(ICONS) as Tab[];
 const SOON: Partial<Record<Tab, string>> = {
-  sites: "Sites arrive in phase 4", notify: "Notifications arrive in phase 4",
 };
 
 const load = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
@@ -172,6 +173,10 @@ export default function App() {
   const [at, setAt] = useState(Date.now());
   const [art, setArt] = useState(""); const [col, setCol] = useState("");
   const clip = useClipHistory();
+  const [chatOn, setChatOn] = useState<boolean>(() => load("chatOn", false));
+  const [chatSeen, setChatSeen] = useState<number>(() => load("chatSeen", 0));
+  const allN = useNotifs(chatOn, 5000);
+  const unread = chatOn ? allN.filter((n) => isChat(n) && n.at > chatSeen).length : 0;
   const [snips, setSnips] = useState<Clip[]>(() => load("snips", []));
   const [shelf, setShelf] = useState<string[]>(() => load("shelf", []));
   const t = useRef<number>();
@@ -190,6 +195,8 @@ export default function App() {
     if (!m.title) { setArt(""); setCol(""); return; }
     invoke<string>("get_art").then((a) => { setArt(a); if (a) avgColor(a).then(setCol); else setCol(""); }).catch(() => {});
   }, [m.title, m.artist]);
+  useEffect(() => save("chatOn", chatOn), [chatOn]);
+  useEffect(() => { if (open && tab === "chat" && chatOn) { const t = Date.now(); setChatSeen(t); save("chatSeen", t); } }, [open, tab, chatOn, allN]);
   useEffect(() => save("snips", snips), [snips]);
   useEffect(() => save("shelf", shelf), [shelf]);
   useEffect(() => {
@@ -203,9 +210,9 @@ export default function App() {
   else if (tab === "widgets") body = <Widgets cfg={cfg} />;
   else if (tab === "tools") body = <Tools />;
   else if (tab === "settings") body = <Settings cfg={cfg} set={setCfg} />;
-  else if (tab === "chat") body = (
-    <div className="chatbox"><div className="card2">Chat overlay is stopped. It needs Windows notification access to read WhatsApp, Instagram and Messenger chats, which isn't built in yet.</div>
-      <button className="pill" disabled>▷ Start</button></div>);
+  else if (tab === "chat") body = <ChatView on={chatOn} setOn={setChatOn} items={allN} />;
+  else if (tab === "sites") body = <Sites />;
+  else if (tab === "notify") body = <Notifications />;
   else if (tab === "clip") body = <ClipView items={clip.items} clear={clip.clear} snips={snips} setSnips={setSnips} />;
   else if (tab === "shelf") body = <Shelf files={shelf} setFiles={setShelf} />;
   else if (tab === "call") body = <Call />;
@@ -220,7 +227,8 @@ export default function App() {
       {!open && (
         <div className={"collapsed" + (dot ? " dot" : full ? " full" : "")}>
           {!dot && (art ? <img src={art} alt="" /> : <span />)}
-          {m.playing && <div className={"bars" + (cfg.viz === "pixels" ? " px" : "")}><i /><i /><i /><i /></div>}
+          {unread > 0 && <span className="badge">{unread > 9 ? "9+" : unread}</span>}
+          {m.playing && !(dot && unread > 0) && <div className={"bars" + (cfg.viz === "pixels" ? " px" : "")}><i /><i /><i /><i /></div>}
         </div>
       )}
       <AnimatePresence>

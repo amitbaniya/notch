@@ -1,9 +1,10 @@
-# Notch (phase 3 + appearance)
+# Notch (phase 4)
 Dynamic Island-style notch for Windows 10/11. Tauri 2 + React + TypeScript + Motion.
 
 Setup: install Rust, Node 18+ and WebView2. Then `npm install` and `npm run tauri dev` (`npm run tauri build` for an installer).
 
 Hover the top-centre of the screen to open.
+Phase 4 adds: Sites (own windows, stay signed in), Notifications and Chat overlay (read from the Windows toast database; WhatsApp, Instagram, Messenger, Telegram, Discord).
 Settings > Appearance: Shape (Island / Notch / Hole punch), Surface themes, Progress bar styles, Visualizer, Background.
 Phase 3 adds: Call (mic mute with live level, speaker volume + test, camera check) and Controls (brightness, volume, Wi-Fi, Bluetooth, mute, power plan; Night light and Focus open Windows Settings).
 Phase 2 adds: Clipboard cards (text, links, images, files, snippets), Shelf (drag files in, Send to phone via QR), and a Notch / Full pill / Hole punch collapsed style in Settings.

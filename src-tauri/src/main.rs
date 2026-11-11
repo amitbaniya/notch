@@ -341,12 +341,83 @@ async fn set_power(mode: String) {
     let _ = mode;
 }
 
+// Opens a site in its own window. The WebView2 profile is persistent, so logins survive restarts.
+// Only the "main" window has IPC access (see capabilities), so remote pages can't call the app.
+#[tauri::command]
+async fn open_site(app: tauri::AppHandle, label: String, url: String, title: String) {
+    if !(url.starts_with("https://") || url.starts_with("http://")) { return; }
+    if let Some(w) = app.get_webview_window(&label) { let _ = w.show(); let _ = w.set_focus(); return; }
+    if let Ok(u) = url.parse::<tauri::Url>() {
+        let _ = tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::External(u)).title(title).inner_size(1100.0, 760.0).build();
+    }
+}
+
+#[derive(Serialize)]
+struct Notif { id: i64, app: String, title: String, body: String, at: i64 }
+
+#[tauri::command]
+async fn get_notifications() -> Vec<Notif> {
+    #[cfg(windows)]
+    return read_notifs().unwrap_or_default();
+    #[cfg(not(windows))]
+    Vec::new()
+}
+
+// Reads Windows' own toast database (a copy of it, read-only use). No package identity needed.
+#[cfg(windows)]
+fn read_notifs() -> Option<Vec<Notif>> {
+    use rusqlite::types::ValueRef;
+    let dir = std::path::PathBuf::from(std::env::var("LOCALAPPDATA").ok()?).join("Microsoft\\Windows\\Notifications");
+    let tmp = std::env::temp_dir().join("notch-wpn");
+    std::fs::create_dir_all(&tmp).ok()?;
+    for f in ["wpndatabase.db", "wpndatabase.db-wal", "wpndatabase.db-shm"] {
+        let _ = std::fs::remove_file(tmp.join(f));
+        let _ = std::fs::copy(dir.join(f), tmp.join(f));
+    }
+    let c = rusqlite::Connection::open(tmp.join("wpndatabase.db")).ok()?;
+    let mut st = c.prepare("SELECT n.Id, h.PrimaryId, n.Payload, n.ArrivalTime FROM Notification n JOIN NotificationHandler h ON h.RecordId = n.HandlerId WHERE n.Type = 'toast' ORDER BY n.ArrivalTime DESC LIMIT 60").ok()?;
+    let rows = st.query_map([], |r| {
+        let p = match r.get_ref(2)? { ValueRef::Blob(b) | ValueRef::Text(b) => b.to_vec(), _ => Vec::new() };
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1).unwrap_or_default(), p, r.get::<_, i64>(3).unwrap_or(0)))
+    }).ok()?;
+    let mut out = Vec::new();
+    for (id, app, payload, ft) in rows.flatten() {
+        let xml = if payload.contains(&0) {
+            String::from_utf16_lossy(&payload.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect::<Vec<_>>())
+        } else { String::from_utf8_lossy(&payload).to_string() };
+        let t = toast_texts(&xml);
+        if t.is_empty() { continue; }
+        out.push(Notif { id, app, title: t[0].clone(), body: t[1..].join(" "), at: ft / 10_000 - 11_644_473_600_000 });
+    }
+    Some(out)
+}
+
+#[cfg(windows)]
+fn toast_texts(xml: &str) -> Vec<String> {
+    let mut v = Vec::new();
+    let mut rest = xml;
+    while let Some(i) = rest.find("<text") {
+        rest = &rest[i + 5..];
+        let Some(g) = rest.find('>') else { break };
+        let head = &rest[..g];
+        if !(head.is_empty() || head.starts_with(' ')) { continue; } // e.g. <textblock>
+        let self_closed = head.ends_with('/');
+        rest = &rest[g + 1..];
+        if self_closed { continue; }
+        let Some(e) = rest.find("</text>") else { break };
+        let t = rest[..e].replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&apos;", "'").replace("&amp;", "&");
+        if !t.trim().is_empty() { v.push(t.trim().to_string()); }
+        rest = &rest[e + 7..];
+    }
+    v
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Expanded(Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(280)), Arc::new(AtomicU32::new(0))))
         .manage(Arc::new(Share::default()))
-        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power])
+        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications])
         .setup(|app| {
             let win = app.get_webview_window("main").unwrap();
             if let Ok(Some(mon)) = win.primary_monitor() {
