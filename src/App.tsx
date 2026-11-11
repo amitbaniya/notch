@@ -1,4 +1,4 @@
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import { CSSProperties, memo, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -81,25 +81,28 @@ function Music({ m, at, art, bar }: { m: Media; at: number; art: string; bar: Ba
   );
 }
 
-function MiniVol() {
+// A native range input: reliable click, drag and keyboard handling. memo() keeps it from re-rendering with the progress bar's animation.
+const MiniVol = memo(function MiniVol() {
   const [a, setA] = useAudio(1500);
   const live = useLive("set_out_vol", (n) => ({ v: n / 100 }));
   const [v, setV] = useState(0);
-  const drag = useRef(false), ref = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (a && !drag.current) setV(Math.round(a.out_vol * 100)); }, [a]);
-  const f = (e: React.PointerEvent) => { const r = ref.current!.getBoundingClientRect(); return Math.round(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * 100); };
+  const hold = useRef(0); // ignore polled values briefly after the user moves the slider
+  useEffect(() => { if (a && Date.now() > hold.current) setV(Math.round(a.out_vol * 100)); }, [a]);
   const muted = !!a?.out_mute;
+  const send = (n: number) => {
+    n = Math.max(0, Math.min(100, n));
+    hold.current = Date.now() + 800; setV(n); live(n);
+    if (muted && a) { setA({ ...a, out_mute: false }); invoke("set_mute", { mic: false, m: false }); }
+  };
+  const shown = muted ? 0 : v;
   return (
     <div className="mv">
       <button onClick={() => { if (a) { setA({ ...a, out_mute: !muted }); invoke("set_mute", { mic: false, m: !muted }); } }} aria-label="Mute"><I n={muted ? "volumeOff" : "volume"} s={20} /></button>
-      <div ref={ref} className="hs mini" onPointerDown={(e) => { drag.current = true; e.currentTarget.setPointerCapture(e.pointerId); const n = f(e); setV(n); live(n); }}
-        onPointerMove={(e) => { if (e.buttons) { const n = f(e); setV(n); live(n); } }} onPointerUp={(e) => { drag.current = false; live(f(e)); }}
-        onWheel={(e) => { const n = Math.max(0, Math.min(100, v + (e.deltaY < 0 ? 3 : -3))); setV(n); live(n); }}>
-        <i style={{ width: `${muted ? 0 : v}%` }} />
-      </div>
+      <input type="range" className="vr" min={0} max={100} value={shown} aria-label="Volume" style={{ "--v": `${shown}%` } as CSSProperties}
+        onChange={(e) => send(Number(e.target.value))} onWheel={(e) => send(v + (e.deltaY < 0 ? 3 : -3))} />
     </div>
   );
-}
+});
 
 function MiniClock() {
   const [t, setT] = useState(new Date());
@@ -165,7 +168,7 @@ export default function App() {
   const disRef = useRef(disabled); disRef.current = disabled;
   const hudRef = useRef(false);
   const [tab, setTab] = useState<Tab>("music");
-  const [cfg, setCfg] = useState<Cfg>(() => { const sv = load<any>("cfg", {}); return { style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, hud: "auto", peek: "on", ...sv, sizeNotch: sv.sizeNotch ?? sv.size ?? 80, sizeOpen: sv.sizeOpen ?? sv.size ?? 85, sizeHud: sv.sizeHud ?? 80 }; });
+  const [cfg, setCfg] = useState<Cfg>(() => { const sv = load<any>("cfg", {}); return { style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, hud: "auto", peek: "on", tabHover: "on", ...sv, sizeNotch: sv.sizeNotch ?? sv.size ?? 80, sizeOpen: sv.sizeOpen ?? sv.size ?? 85, sizeHud: sv.sizeHud ?? 80 }; });
   const [m, setM] = useState<Media>({ title: "", artist: "", playing: false, active: false, pos: 0, dur: 0 });
   const [at, setAt] = useState(Date.now());
   const [art, setArt] = useState(""); const [col, setCol] = useState("");
@@ -176,6 +179,7 @@ export default function App() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [peek, setPeek] = useState<Notif | null>(null);
   const t = useRef<number>();
+  const tabT = useRef<number>();
   const seen = useRef(new Set<number>()), t0 = useRef(Date.now() - 2000);
   const nots = useNotifs(cfg.peek === "on", 3000);
 
@@ -282,7 +286,9 @@ export default function App() {
               {TABS.map(([k, ic]) => (
                 <span key={k} style={{ display: "contents" }}>
                   {k === "settings" && <b className="sep" />}
-                  <button className={"tab" + (tab === k ? " on" : "")} onClick={() => setTab(k)} aria-label={k}><I n={ic} s={22} /></button>
+                  <button className={"tab" + (tab === k ? " on" : "")} onClick={() => setTab(k)} aria-label={k}
+                    onMouseEnter={() => { if (cfg.tabHover === "on") { clearTimeout(tabT.current); tabT.current = window.setTimeout(() => setTab(k), 110); } }}
+                    onMouseLeave={() => clearTimeout(tabT.current)}><I n={ic} s={22} /></button>
                 </span>
               ))}
             </nav>

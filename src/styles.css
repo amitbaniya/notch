@@ -226,3 +226,14 @@ button,input{font:inherit;color:inherit}
 
 .hudbtn{position:absolute;right:0;top:0;bottom:0;width:34px;background:none;border:0;border-left:1px solid #ffffff22;border-bottom-right-radius:12px;color:var(--fg);display:grid;place-items:center;cursor:pointer;opacity:.85}
 .hudbtn:hover{background:#ffffff18;opacity:1}
+
+/* tab icons: highlighted and slightly larger on hover or when selected (the icon only) */
+.tab{transition:color .15s}
+.tab svg{transition:transform .15s,filter .15s}
+.tab:hover,.tab.on{color:#fff}
+.tab:hover svg,.tab.on svg{transform:scale(1.22);filter:drop-shadow(0 0 5px #ffffff66)}
+/* music card volume slider */
+.vr{-webkit-appearance:none;appearance:none;width:170px;height:22px;margin:0;background:transparent;cursor:pointer;outline:none}
+.vr::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(90deg,#ffffffd9 var(--v,50%),#ffffff33 var(--v,50%))}
+.vr::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-4px;border-radius:50%;background:#fff;box-shadow:0 1px 5px #0006;opacity:0;transition:opacity .15s}
+.vr:hover::-webkit-slider-thumb,.vr:active::-webkit-slider-thumb{opacity:1}

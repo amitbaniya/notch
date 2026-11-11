@@ -64,6 +64,9 @@ export function Settings({ cfg, set, enabled, setEnabled }: { cfg: Cfg; set: (c:
       <Row title="Notification peek" desc="New notifications slide out for 2 seconds, without you hovering.">
         <Seg v={cfg.peek} set={up("peek")} opts={[["on", "On"], ["off", "Off"]]} />
       </Row>
+      <Row title="Switch tabs on hover" desc="Rest the pointer on a tab icon for a moment to open that tab. Clicking still works.">
+        <Seg v={cfg.tabHover} set={up("tabHover")} opts={[["on", "On"], ["off", "Off"]]} />
+      </Row>
       <Row title="Gaming bar" desc="A stats strip (CPU, GPU, RAM, network, clock) while a game is fullscreen. Hovering never opens the island then; use the arrow at the bar's right end.">
         <Seg v={cfg.hud} set={up("hud")} opts={[["auto", "Auto"], ["always", "Always"], ["off", "Off"]]} />
       </Row>
