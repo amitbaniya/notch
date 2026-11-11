@@ -36,6 +36,7 @@ const P = {
   mic: "M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM6 11a6 6 0 0012 0M12 17v4",
   micOff: "M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM6 11a6 6 0 0012 0M12 17v4M4 4l16 16",
   down: "M12 4v14M6 12l6 6 6-6",
+  chevronDown: "M6 9l6 6 6-6",
 } as const;
 export type IconName = keyof typeof P;
 export function I({ n, s = 20, fill }: { n: IconName; s?: number; fill?: boolean }) {

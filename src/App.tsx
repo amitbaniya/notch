@@ -142,7 +142,7 @@ function Tools() {
   );
 }
 
-function Hud({ s }: { s: Stats | null }) {
+function Hud({ s, onOpen }: { s: Stats | null; onOpen: () => void }) {
   const [t, setT] = useState(new Date());
   useEffect(() => { const i = setInterval(() => setT(new Date()), 1000); return () => clearInterval(i); }, []);
   const item = (k: string, v: string) => <span className="hi"><b>{k}</b> {v}</span>;
@@ -154,6 +154,7 @@ function Hud({ s }: { s: Stats | null }) {
       {item("RAM", s ? `${Math.round(s.ram)}%` : "—")}
       <span className="hi"><I n="down" s={12} /> {s ? s.net.toFixed(1) : "0.0"} Mbps</span>
       <span className="hi">{t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+      <button className="hudbtn" onClick={onOpen} aria-label="Open Notch" title="Open Notch"><I n="chevronDown" s={14} /></button>
     </div>
   );
 }
@@ -162,8 +163,9 @@ export default function App() {
   const [open, setOpen] = useState(false);
   const [disabled, setDisabled] = useState<boolean>(() => load("disabled", false));
   const disRef = useRef(disabled); disRef.current = disabled;
+  const hudRef = useRef(false);
   const [tab, setTab] = useState<Tab>("music");
-  const [cfg, setCfg] = useState<Cfg>(() => { const sv = load<any>("cfg", {}); return { style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, hud: "auto", peek: "on", ...sv, sizeNotch: sv.sizeNotch ?? sv.size ?? 80, sizeOpen: sv.sizeOpen ?? sv.size ?? 85 }; });
+  const [cfg, setCfg] = useState<Cfg>(() => { const sv = load<any>("cfg", {}); return { style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, hud: "auto", peek: "on", ...sv, sizeNotch: sv.sizeNotch ?? sv.size ?? 80, sizeOpen: sv.sizeOpen ?? sv.size ?? 85, sizeHud: sv.sizeHud ?? 80 }; });
   const [m, setM] = useState<Media>({ title: "", artist: "", playing: false, active: false, pos: 0, dur: 0 });
   const [at, setAt] = useState(Date.now());
   const [art, setArt] = useState(""); const [col, setCol] = useState("");
@@ -178,6 +180,7 @@ export default function App() {
   const nots = useNotifs(cfg.peek === "on", 3000);
 
   const hud = !disabled && (cfg.hud === "always" || (cfg.hud === "auto" && gaming));
+  hudRef.current = hud; // while the gaming bar shows, hovering must not open the island
   const float = cfg.style !== "pill", dot = cfg.style === "dot", full = cfg.style === "full";
   const mode = disabled ? "off" : open ? "open" : peek ? "peek" : hud ? "hud" : "idle";
 
@@ -186,7 +189,7 @@ export default function App() {
     const r = document.documentElement; r.dataset.surface = cfg.surface; r.style.setProperty("--ap", `${100 - cfg.see}%`);
   }, [cfg]);
   useEffect(() => {
-    const un = listen<boolean>("hover", (e) => { clearTimeout(t.current); if (disRef.current) return; t.current = window.setTimeout(() => setOpen(e.payload), e.payload ? 120 : 300); });
+    const un = listen<boolean>("hover", (e) => { clearTimeout(t.current); if (disRef.current || (e.payload && hudRef.current)) return; t.current = window.setTimeout(() => setOpen(e.payload), e.payload ? 120 : 300); });
     return () => { un.then((f) => f()); };
   }, []);
   useEffect(() => {
@@ -196,10 +199,12 @@ export default function App() {
   useEffect(() => { invoke("set_hud_want", { v: hud }); }, [hud]);
   useEffect(() => {
     // the hover area in Rust must match the scaled island
-    const sn = cfg.sizeNotch / 100, so = cfg.sizeOpen / 100;
-    const cw = disabled ? 76 : hud ? 660 : dot ? 44 : full ? 300 : 230, ch = disabled ? 9 : 56;
-    invoke("set_expanded", { v: open, cw: Math.round(cw * sn), ch: Math.round(ch * sn), top: Math.round((float ? 10 : 0) * so), s: so });
-  }, [open, hud, dot, full, float, disabled, cfg.sizeNotch, cfg.sizeOpen]);
+    // With the gaming bar showing, only its small button (far right) is hit-testable, so the game keeps all other clicks.
+    const so = cfg.sizeOpen / 100;
+    let cw = dot ? 44 : full ? 300 : 230, ch = 56, ox = 0, sc = cfg.sizeNotch / 100;
+    if (disabled) { cw = 76; ch = 9; } else if (hud) { cw = 34; ch = 32; ox = 313; sc = cfg.sizeHud / 100; }
+    invoke("set_expanded", { v: open, cw: Math.round(cw * sc), ch: Math.round(ch * sc), ox: Math.round(ox * sc), top: Math.round((float ? 10 : 0) * so), s: so });
+  }, [open, hud, dot, full, float, disabled, cfg.sizeNotch, cfg.sizeOpen, cfg.sizeHud]);
   useEffect(() => { refreshBr().catch(() => {}); }, []); // warm the brightness cache so Controls opens instantly
   useEffect(() => save("disabled", disabled), [disabled]);
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
@@ -249,7 +254,7 @@ export default function App() {
   const fade = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0, transition: { duration: 0.1 } } };
 
   return (
-    <motion.div className="scaler" initial={false} animate={{ scale: (open ? cfg.sizeOpen : cfg.sizeNotch) / 100 }} transition={SPRING}>
+    <motion.div className="scaler" initial={false} animate={{ scale: (open ? cfg.sizeOpen : mode === "hud" ? cfg.sizeHud : cfg.sizeNotch) / 100 }} transition={SPRING}>
     <motion.div className="island" initial={false}
       animate={{ width: W, height: H, marginTop: mt, borderTopLeftRadius: rt, borderTopRightRadius: rt, borderBottomLeftRadius: rb, borderBottomRightRadius: rb }}
       transition={SPRING}>
@@ -263,7 +268,7 @@ export default function App() {
           </motion.div>
         )}
         {mode === "off" && <motion.div key="off" className="handle" title="Click to show Notch" onClick={() => setDisabled(false)} {...fade} />}
-        {mode === "hud" && <motion.div key="hud" className="collapsed hudw" {...fade}><Hud s={stats} /></motion.div>}
+        {mode === "hud" && <motion.div key="hud" className="collapsed hudw" {...fade}><Hud s={stats} onOpen={() => setOpen(true)} /></motion.div>}
         {mode === "peek" && peek && (
           <motion.div key="peek" className="pk" {...fade}>
             <span className="nri" style={{ background: `hsl(${hue(peek.app)} 60% 45%)` }}>{(peek.title || "?").charAt(0).toUpperCase()}</span>

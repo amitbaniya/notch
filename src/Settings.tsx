@@ -64,8 +64,11 @@ export function Settings({ cfg, set, enabled, setEnabled }: { cfg: Cfg; set: (c:
       <Row title="Notification peek" desc="New notifications slide out for 2 seconds, without you hovering.">
         <Seg v={cfg.peek} set={up("peek")} opts={[["on", "On"], ["off", "Off"]]} />
       </Row>
-      <Row title="Gaming bar" desc="A stats strip (CPU, GPU, RAM, network, clock) while a game is fullscreen.">
+      <Row title="Gaming bar" desc="A stats strip (CPU, GPU, RAM, network, clock) while a game is fullscreen. Hovering never opens the island then; use the arrow at the bar's right end.">
         <Seg v={cfg.hud} set={up("hud")} opts={[["auto", "Auto"], ["always", "Always"], ["off", "Off"]]} />
+      </Row>
+      <Row title="Gaming bar size" desc="Scales the stats strip, keeping its proportions.">
+        <Slider v={cfg.sizeHud} min={40} max={105} set={up("sizeHud")} label="Gaming bar size" />
       </Row>
     </div>
   );

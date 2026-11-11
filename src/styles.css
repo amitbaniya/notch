@@ -223,3 +223,6 @@ button,input{font:inherit;color:inherit}
 .hs.mini{position:relative;width:170px;height:6px;margin:0}
 .hs.mini::before{content:"";position:absolute;left:-6px;right:-6px;top:-11px;bottom:-11px}
 .times{position:relative;z-index:5}
+
+.hudbtn{position:absolute;right:0;top:0;bottom:0;width:34px;background:none;border:0;border-left:1px solid #ffffff22;border-bottom-right-radius:12px;color:var(--fg);display:grid;place-items:center;cursor:pointer;opacity:.85}
+.hudbtn:hover{background:#ffffff18;opacity:1}
