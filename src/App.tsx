@@ -63,7 +63,7 @@ function useSmoothPos(m: Media, at: number) {
 function Music({ m, at, art, bar }: { m: Media; at: number; art: string; bar: Bar }) {
   const [pos, jump] = useSmoothPos(m, at);
   const c = (a: string) => invoke("media_control", { action: a });
-  if (!m.active) return <div className="empty">Nothing playing. Start music in any app.</div>;
+  if (!m.active) return <BigClock />;
   const f = m.dur ? Math.min(1, pos / m.dur) : 0;
   return (
     <div className="music">
@@ -76,6 +76,24 @@ function Music({ m, at, art, bar }: { m: Media; at: number; art: string; bar: Ba
       </div>
       <Progress kind={bar} frac={f} seed={m.title} onSeek={(x) => { if (m.dur) { jump(x * m.dur); c(`seek:${x * m.dur}`); } }} />
       <div className="times"><span>{mmss(pos)}</span><span>-{mmss(m.dur - pos)}</span></div>
+    </div>
+  );
+}
+
+function MiniClock() {
+  const [t, setT] = useState(new Date());
+  useEffect(() => { const i = setInterval(() => setT(new Date()), 10000); return () => clearInterval(i); }, []);
+  return <span className="mini">{t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>;
+}
+
+function BigClock() {
+  const [t, setT] = useState(new Date());
+  useEffect(() => { const i = setInterval(() => setT(new Date()), 1000); return () => clearInterval(i); }, []);
+  return (
+    <div className="bigclock">
+      <div className="bigt2">{t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</div>
+      <div className="sub">{t.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}</div>
+      <div className="hint">Nothing playing</div>
     </div>
   );
 }
@@ -122,7 +140,7 @@ function Hud({ s }: { s: Stats | null }) {
 export default function App() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("music");
-  const [cfg, setCfg] = useState<Cfg>(() => ({ style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, hud: "auto", peek: "on", ...load<Partial<Cfg>>("cfg", {}) }));
+  const [cfg, setCfg] = useState<Cfg>(() => ({ style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, size: 80, hud: "auto", peek: "on", ...load<Partial<Cfg>>("cfg", {}) }));
   const [m, setM] = useState<Media>({ title: "", artist: "", playing: false, active: false, pos: 0, dur: 0 });
   const [at, setAt] = useState(Date.now());
   const [art, setArt] = useState(""); const [col, setCol] = useState("");
@@ -154,8 +172,9 @@ export default function App() {
   }, []);
   useEffect(() => { invoke("set_hud_want", { v: hud }); }, [hud]);
   useEffect(() => {
-    invoke("set_expanded", { v: open, cw: hud ? 660 : dot ? 44 : full ? 300 : 230, top: float ? 10 : 0 });
-  }, [open, hud, dot, full, float]);
+    const s = cfg.size / 100; // the hover area in Rust must match the scaled island
+    invoke("set_expanded", { v: open, cw: Math.round((hud ? 660 : dot ? 44 : full ? 300 : 230) * s), top: Math.round((float ? 10 : 0) * s), s });
+  }, [open, hud, dot, full, float, cfg.size]);
   useEffect(() => { // peek at notifications that arrive after launch
     const fresh = nots.filter((n) => !seen.current.has(n.id) && n.at > t0.current);
     nots.forEach((n) => seen.current.add(n.id));
@@ -198,6 +217,7 @@ export default function App() {
   const fade = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0, transition: { duration: 0.1 } } };
 
   return (
+    <div className="scaler" style={{ transform: `scale(${cfg.size / 100})` }}>
     <motion.div className="island" initial={false}
       animate={{ width: W, height: H, marginTop: mt, borderTopLeftRadius: rt, borderTopRightRadius: rt, borderBottomLeftRadius: rb, borderBottomRightRadius: rb }}
       transition={SPRING}>
@@ -206,6 +226,7 @@ export default function App() {
         {mode === "idle" && (
           <motion.div key="idle" className={"collapsed" + (dot ? " dot" : full ? " full" : "")} {...fade}>
             {!dot && (art ? <img src={art} alt="" /> : <span />)}
+            {!dot && !m.playing && <MiniClock />}
             {m.playing && <div className={"bars" + (cfg.viz === "pixels" ? " px" : "")}><i /><i /><i /><i /></div>}
           </motion.div>
         )}
@@ -232,5 +253,6 @@ export default function App() {
         )}
       </AnimatePresence>
     </motion.div>
+    </div>
   );
 }

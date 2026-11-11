@@ -27,6 +27,13 @@ export function Settings({ cfg, set }: { cfg: Cfg; set: (c: Cfg) => void }) {
       <Row title="Shape" desc="A floating island under the top edge, a notch that hangs from it, or a small hole punch.">
         <Seg v={cfg.style} set={up("style")} opts={[["full", "Island"], ["pill", "Notch"], ["dot", "Hole punch"]]} />
       </Row>
+      <Row title="Size" desc="Scales the whole island, keeping its proportions. Smaller means less of your screen is covered.">
+        <div className="rg">
+          <input type="range" min={40} max={110} value={cfg.size} style={{ "--v": `${((cfg.size - 40) / 70) * 100}%` } as React.CSSProperties}
+            onChange={(e) => up("size")(Number(e.target.value))} aria-label="Size" />
+          <span className="mp">{cfg.size}%</span>
+        </div>
+      </Row>
       <Row title="Transparency" desc="Slide right to see more of what's behind the island.">
         <div className="rg">
           <input type="range" min={0} max={85} value={cfg.see} style={{ "--v": `${(cfg.see / 85) * 100}%` } as React.CSSProperties}

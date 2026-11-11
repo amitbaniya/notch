@@ -197,3 +197,9 @@ button,input{font:inherit;color:inherit}
 .sr .rg input[type=range]{-webkit-appearance:none;appearance:none;flex:1;width:auto;height:6px;padding:0;border-radius:3px;outline:none;cursor:pointer;
   background:linear-gradient(90deg,#ffffffcc var(--v,50%),#ffffff26 var(--v,50%))}
 .sr .rg input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 2px 8px #0006}
+
+.scaler{transform-origin:top center;display:flex;justify-content:center}
+.mini{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;pointer-events:none}
+.bigclock{margin:auto;text-align:center;display:flex;flex-direction:column;gap:2px}
+.bigt2{font-size:56px;font-weight:300;letter-spacing:-2px;line-height:1.05;font-variant-numeric:tabular-nums}
+.bigclock .hint{margin-top:8px}
