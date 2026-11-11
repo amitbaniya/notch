@@ -4,6 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ClipView, useClipHistory, Clip } from "./Clip";
 import { Shelf } from "./Shelf";
+import { Call } from "./Call";
+import { Controls } from "./Controls";
 
 type Media = { title: string; artist: string; playing: boolean; active: boolean; pos: number; dur: number };
 type Tab = "music" | "sites" | "notify" | "chat" | "shelf" | "clip" | "widgets" | "controls" | "tools" | "call" | "settings";
@@ -27,7 +29,6 @@ const ICONS: Record<Tab, string> = {
 const TABS = Object.keys(ICONS) as Tab[];
 const SOON: Partial<Record<Tab, string>> = {
   sites: "Sites arrive in phase 4", notify: "Notifications arrive in phase 4",
-  controls: "Controls arrive in phase 3", call: "Call tools arrive in phase 3",
 };
 const ACCENTS = ["#ffb38a", "#8ab4ff", "#9be58f", "#ff8fb1", "#e6d36e"];
 
@@ -207,6 +208,8 @@ export default function App() {
       <button className="pill" disabled>▷ Start</button></div>);
   else if (tab === "clip") body = <ClipView items={clip.items} clear={clip.clear} snips={snips} setSnips={setSnips} />;
   else if (tab === "shelf") body = <Shelf files={shelf} setFiles={setShelf} />;
+  else if (tab === "call") body = <Call />;
+  else if (tab === "controls") body = <Controls />;
   else body = <div className="empty">{SOON[tab]}</div>;
 
   return (

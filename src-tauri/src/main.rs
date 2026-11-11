@@ -162,12 +162,168 @@ fn serve(mut s: TcpStream, sh: &Share, token: &str) {
     let _ = s.write_all(h.as_bytes());
 }
 
+#[cfg(windows)]
+mod audio {
+    use windows::core::Result;
+    use windows::Win32::Media::Audio::{eConsole, Endpoints::{IAudioEndpointVolume, IAudioMeterInformation}, EDataFlow, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator};
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
+    fn dev(flow: EDataFlow) -> Result<IMMDevice> {
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            let e: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+            e.GetDefaultAudioEndpoint(flow, eConsole)
+        }
+    }
+    pub fn vol(flow: EDataFlow) -> Result<IAudioEndpointVolume> { unsafe { dev(flow)?.Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None) } }
+    pub fn meter(flow: EDataFlow) -> Result<IAudioMeterInformation> { unsafe { dev(flow)?.Activate::<IAudioMeterInformation>(CLSCTX_ALL, None) } }
+}
+
+#[cfg(windows)]
+fn run(cmd: &str, args: &[&str]) -> String {
+    use std::os::windows::process::CommandExt;
+    std::process::Command::new(cmd).args(args).creation_flags(0x08000000).output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default()
+}
+
+#[derive(Serialize, Default)]
+struct Audio { out_vol: f32, out_mute: bool, in_mute: bool, in_level: f32, has_mic: bool }
+
+#[tauri::command]
+async fn get_audio() -> Audio {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Media::Audio::{eCapture, eRender};
+        let mut a = Audio::default();
+        if let Ok(v) = audio::vol(eRender) {
+            a.out_vol = unsafe { v.GetMasterVolumeLevelScalar() }.unwrap_or(0.0);
+            a.out_mute = unsafe { v.GetMute() }.map(|b| b.as_bool()).unwrap_or(false);
+        }
+        if let Ok(v) = audio::vol(eCapture) {
+            a.has_mic = true;
+            a.in_mute = unsafe { v.GetMute() }.map(|b| b.as_bool()).unwrap_or(false);
+        }
+        if let Ok(m) = audio::meter(eCapture) { a.in_level = unsafe { m.GetPeakValue() }.unwrap_or(0.0); }
+        return a;
+    }
+    #[cfg(not(windows))]
+    Audio::default()
+}
+
+#[tauri::command]
+async fn set_out_vol(v: f32) {
+    #[cfg(windows)]
+    if let Ok(e) = audio::vol(windows::Win32::Media::Audio::eRender) {
+        unsafe { let _ = e.SetMasterVolumeLevelScalar(v.clamp(0.0, 1.0), std::ptr::null()); }
+    }
+    #[cfg(not(windows))]
+    let _ = v;
+}
+
+#[tauri::command]
+async fn set_mute(mic: bool, m: bool) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::{Foundation::BOOL, Media::Audio::{eCapture, eRender}};
+        if let Ok(e) = audio::vol(if mic { eCapture } else { eRender }) { unsafe { let _ = e.SetMute(BOOL::from(m), std::ptr::null()); } }
+    }
+    #[cfg(not(windows))]
+    let _ = (mic, m);
+}
+
+#[tauri::command]
+fn test_sound() {
+    #[cfg(windows)]
+    unsafe { let _ = windows::Win32::UI::WindowsAndMessaging::MessageBeep(windows::Win32::UI::WindowsAndMessaging::MB_OK); }
+}
+
+#[derive(Serialize, Default)]
+struct Radios { wifi: Option<bool>, bt: Option<bool> }
+
+#[tauri::command]
+async fn get_radios() -> Radios {
+    #[cfg(windows)]
+    {
+        use windows::Devices::Radios::{Radio, RadioKind, RadioState};
+        let r = (|| -> windows::core::Result<Radios> {
+            let mut o = Radios::default();
+            for r in Radio::GetRadiosAsync()?.get()? {
+                let on = r.State()? == RadioState::On;
+                match r.Kind()? { RadioKind::WiFi => o.wifi = Some(on), RadioKind::Bluetooth => o.bt = Some(on), _ => {} }
+            }
+            Ok(o)
+        })();
+        return r.unwrap_or_default();
+    }
+    #[cfg(not(windows))]
+    Radios::default()
+}
+
+#[tauri::command]
+async fn set_radio(bt: bool, on: bool) {
+    #[cfg(windows)]
+    {
+        use windows::Devices::Radios::{Radio, RadioKind, RadioState};
+        let _ = (|| -> windows::core::Result<()> {
+            let _ = Radio::RequestAccessAsync()?.get();
+            for r in Radio::GetRadiosAsync()?.get()? {
+                if r.Kind()? == if bt { RadioKind::Bluetooth } else { RadioKind::WiFi } {
+                    r.SetStateAsync(if on { RadioState::On } else { RadioState::Off })?.get()?;
+                }
+            }
+            Ok(())
+        })();
+    }
+    #[cfg(not(windows))]
+    let _ = (bt, on);
+}
+
+// Brightness only works on built-in laptop displays (WMI). Returns -1 when unsupported.
+#[tauri::command]
+async fn get_brightness() -> i32 {
+    #[cfg(windows)]
+    return run("powershell", &["-NoProfile", "-Command", "(Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness).CurrentBrightness"]).parse().unwrap_or(-1);
+    #[cfg(not(windows))]
+    -1
+}
+
+#[tauri::command]
+async fn set_brightness(v: i32) {
+    #[cfg(windows)]
+    {
+        let s = format!("Invoke-CimMethod -InputObject (Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods) -MethodName WmiSetBrightness -Arguments @{{Timeout=1;Brightness={}}}", v.clamp(0, 100));
+        run("powershell", &["-NoProfile", "-Command", &s]);
+    }
+    #[cfg(not(windows))]
+    let _ = v;
+}
+
+const PLANS: [(&str, &str); 3] = [("battery", "a1841308-3541-4fab-bc81-f71556f20b4a"), ("balanced", "381b4222-f694-41f0-9685-ff5bb260df2e"), ("perf", "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c")];
+
+#[tauri::command]
+async fn get_power() -> String {
+    #[cfg(windows)]
+    {
+        let o = run("powercfg", &["/getactivescheme"]).to_lowercase();
+        return PLANS.iter().find(|(_, g)| o.contains(g)).map(|(k, _)| k.to_string()).unwrap_or_default();
+    }
+    #[cfg(not(windows))]
+    String::new()
+}
+
+#[tauri::command]
+async fn set_power(mode: String) {
+    #[cfg(windows)]
+    if let Some((_, g)) = PLANS.iter().find(|(k, _)| *k == mode) { run("powercfg", &["/setactive", g]); }
+    #[cfg(not(windows))]
+    let _ = mode;
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Expanded(Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(280))))
         .manage(Arc::new(Share::default()))
-        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share])
+        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power])
         .setup(|app| {
             let win = app.get_webview_window("main").unwrap();
             if let Ok(Some(mon)) = win.primary_monitor() {
