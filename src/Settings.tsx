@@ -22,7 +22,7 @@ const Toggle = ({ on, set, label }: { on: boolean; set: () => void; label: strin
   <button role="switch" aria-checked={on} aria-label={label} className={"tg" + (on ? " on" : "")} onClick={set}><i /></button>
 );
 
-export function Settings({ cfg, set, enabled, setEnabled }: { cfg: Cfg; set: (c: Cfg) => void; enabled: boolean; setEnabled: (b: boolean) => void }) {
+export function Settings({ cfg, set, enabled, setEnabled, onTestPeek }: { cfg: Cfg; set: (c: Cfg) => void; enabled: boolean; setEnabled: (b: boolean) => void; onTestPeek: () => void }) {
   const up = <K extends keyof Cfg>(k: K) => (v: Cfg[K]) => set({ ...cfg, [k]: v });
   const [auto, setAuto] = useState(false);
   const [sure, setSure] = useState(false);
@@ -68,6 +68,10 @@ export function Settings({ cfg, set, enabled, setEnabled }: { cfg: Cfg; set: (c:
       <div className="sh" style={{ marginTop: 8 }}>BEHAVIOUR</div>
       <Row title="Notification peek" desc="New notifications slide out for 2 seconds, without you hovering.">
         <Seg v={cfg.peek} set={up("peek")} opts={[["on", "On"], ["off", "Off"]]} />
+      </Row>
+      <Row title="Notification size" desc="Scales the notification that slides out. Press Test to preview it.">
+        <Slider v={cfg.sizePeek} min={60} max={150} set={up("sizePeek")} label="Notification size" />
+        <button className="pill2" style={{ marginTop: 8 }} onClick={onTestPeek}>Test</button>
       </Row>
       <Row title="Switch tabs on hover" desc="Rest the pointer on a tab icon for a moment to open that tab. Clicking still works.">
         <Seg v={cfg.tabHover} set={up("tabHover")} opts={[["on", "On"], ["off", "Off"]]} />

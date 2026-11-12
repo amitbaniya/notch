@@ -168,7 +168,7 @@ export default function App() {
   const disRef = useRef(disabled); disRef.current = disabled;
   const hudRef = useRef(false);
   const [tab, setTab] = useState<Tab>("music");
-  const [cfg, setCfg] = useState<Cfg>(() => { const sv = load<any>("cfg", {}); return { style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, hud: "auto", peek: "on", tabHover: "on", ...sv, sizeNotch: sv.sizeNotch ?? sv.size ?? 80, sizeOpen: sv.sizeOpen ?? sv.size ?? 85, sizeHud: sv.sizeHud ?? 80 }; });
+  const [cfg, setCfg] = useState<Cfg>(() => { const sv = load<any>("cfg", {}); return { style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, hud: "auto", peek: "on", tabHover: "on", ...sv, sizeNotch: sv.sizeNotch ?? sv.size ?? 80, sizeOpen: sv.sizeOpen ?? sv.size ?? 85, sizeHud: sv.sizeHud ?? 80, sizePeek: sv.sizePeek ?? 100 }; });
   const [m, setM] = useState<Media>({ title: "", artist: "", playing: false, active: false, pos: 0, dur: 0 });
   const [at, setAt] = useState(Date.now());
   const [art, setArt] = useState(""); const [col, setCol] = useState("");
@@ -241,7 +241,8 @@ export default function App() {
   let body: JSX.Element;
   if (tab === "music") body = <Music m={m} at={at} art={art} bar={cfg.bar} />;
   else if (tab === "tools") body = <Tools />;
-  else if (tab === "settings") body = <Settings cfg={cfg} set={setCfg} enabled={!disabled} setEnabled={(b) => setDisabled(!b)} />;
+  else if (tab === "settings") body = <Settings cfg={cfg} set={setCfg} enabled={!disabled} setEnabled={(b) => setDisabled(!b)}
+    onTestPeek={() => { setOpen(false); setPeek({ id: -1, app: "Notch", title: "Notification preview", body: "This is how notifications will look", at: Date.now() }); }} />;
   else if (tab === "clip") body = <ClipView items={clip.items} clear={clip.clear} snips={snips} setSnips={setSnips} />;
   else if (tab === "shelf") body = <Shelf files={shelf} setFiles={setShelf} />;
   else if (tab === "audio") body = <AudioTab />;
@@ -258,7 +259,7 @@ export default function App() {
   const fade = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0, transition: { duration: 0.1 } } };
 
   return (
-    <motion.div className="scaler" initial={false} animate={{ scale: (open ? cfg.sizeOpen : mode === "hud" ? cfg.sizeHud : cfg.sizeNotch) / 100 }} transition={SPRING}>
+    <motion.div className="scaler" initial={false} animate={{ scale: (open ? cfg.sizeOpen : mode === "hud" ? cfg.sizeHud : mode === "peek" ? cfg.sizePeek : cfg.sizeNotch) / 100 }} transition={SPRING}>
     <motion.div className="island" initial={false}
       animate={{ width: W, height: H, marginTop: mt, borderTopLeftRadius: rt, borderTopRightRadius: rt, borderBottomLeftRadius: rb, borderBottomRightRadius: rb }}
       transition={SPRING}>
