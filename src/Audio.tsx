@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { I } from "./icons";
-import { hue } from "./Notifs";
+import { AppIcon } from "./AppIcon";
 
 export type Audio = { out_vol: number; out_mute: boolean; in_mute: boolean; in_level: number; has_mic: boolean };
 type Sess = { pid: number; name: string; vol: number; mute: boolean };
@@ -58,7 +58,7 @@ function AppRow({ s }: { s: Sess }) {
   const [m, setM] = useState(s.mute);
   useEffect(() => setM(s.mute), [s.mute]);
   const name = s.name.charAt(0).toUpperCase() + s.name.slice(1);
-  return <Row icon={<span className="ml" style={{ background: `hsl(${hue(s.name)} 55% 42%)` }}>{name.charAt(0)}</span>} label={name}
+  return <Row icon={s.pid === 0 ? <I n="volume" s={20} /> : <AppIcon cacheKey={"n:" + s.name.toLowerCase()} kind="pid" arg={String(s.pid)} label={name} size={26} />} label={name}
     value={s.vol * 100} muted={m} live={live} mute={() => { setM(!m); invoke("set_app_mute", { pid: s.pid, m: !m }); }} mIcon={<I n={m ? "volumeOff" : "volume"} s={18} />} />;
 }
 

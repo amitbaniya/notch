@@ -27,3 +27,6 @@ Security software may flag the tool; it is only started while a fullscreen game 
 
 ## Send to phone
 The QR code opens a page on your PC (same Wi-Fi only, random link). Phones can download shelf files (with image previews, sizes, Download all) and send files back; those are saved in Downloads\Notch and added to the shelf.
+
+## App icons
+The sound mixer and notifications show each app's real icon, read from Windows (Store apps via their package logo, others via their executable or App Paths entry). If an icon can't be found, a coloured initial is shown. Icons are cached in memory and localStorage.

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { AppIcon } from "./AppIcon";
 
 export type Notif = { id: number; app: string; title: string; body: string; at: number };
 const ls = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
@@ -26,11 +27,11 @@ export const appName = (raw: string) => {
 export const hue = (s: string) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % 360;
 const ago = (t: number) => { const s = (Date.now() - t) / 1000; return s < 60 ? "now" : s < 3600 ? `${Math.round(s / 60)}m` : s < 86400 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 86400)}d`; };
 
-function Row({ label, title, body, at, unread, extra, onClick }: { label: string; title: string; body: string; at: number; unread?: boolean; extra?: string; onClick?: () => void }) {
+function Row({ label, title, body, at, unread, extra, onClick, app }: { label: string; title: string; body: string; at: number; unread?: boolean; extra?: string; onClick?: () => void; app?: string }) {
   return (
     <div className="nr" onClick={onClick} style={onClick ? { cursor: "pointer" } : undefined}>
       {unread && <i className="dotu" />}
-      <span className="nri" style={{ background: `hsl(${hue(label)} 60% 45%)` }}>{label.charAt(0)}</span>
+      <AppIcon cacheKey={"a:" + (app ?? label)} kind="aumid" arg={app ?? ""} label={label} size={36} />
       <div className="nrb">
         <div className="r"><b>{title}{extra && <span className="sub"> {extra}</span>}</b><span className="sub">{ago(at)}</span></div>
         <div className="sub">{body || label}</div>
@@ -48,7 +49,7 @@ export function Notifications() {
   if (!list.length) return <div className="empty">No notifications. Windows must have app notifications turned on.</div>;
   return (
     <div className="nf">
-      <div className="nfl">{list.map((n) => <Row key={n.id} label={service(n) || appName(n.app)} title={n.title} body={n.body} at={n.at} unread={n.at > seen.current} />)}</div>
+      <div className="nfl">{list.map((n) => <Row key={n.id} label={service(n) || appName(n.app)} title={n.title} body={n.body} at={n.at} unread={n.at > seen.current} app={n.app} />)}</div>
       <div className="nff"><span>{list.length} notification{list.length === 1 ? "" : "s"}</span><button onClick={() => { const t = Date.now(); setCleared(t); lsSet("notif_cleared", t); }}>Clear all</button></div>
     </div>
   );

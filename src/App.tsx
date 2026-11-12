@@ -10,6 +10,7 @@ import { Controls } from "./Controls";
 import { Progress, Bar } from "./Progress";
 import { Settings } from "./Settings";
 import { Sites } from "./Sites";
+import { AppIcon } from "./AppIcon";
 import { Notifications, useNotifs, hue, appName, Notif } from "./Notifs";
 import { I, IconName } from "./icons";
 import type { Cfg } from "./types";
@@ -295,7 +296,7 @@ export default function App() {
         {mode === "hud" && <motion.div key="hud" className="collapsed hudw" {...fade}><Hud s={stats} onOpen={() => setOpen(true)} /></motion.div>}
         {mode === "peek" && peek && (
           <motion.div key="peek" className="pk" {...fade}>
-            <span className="nri" style={{ background: `hsl(${hue(peek.app)} 60% 45%)` }}>{(peek.title || "?").charAt(0).toUpperCase()}</span>
+            <AppIcon cacheKey={"a:" + peek.app} kind="aumid" arg={peek.app} label={peek.title || "?"} size={36} />
             <div className="pkt"><b>{peek.title}</b><span>{peek.body || appName(peek.app)}</span></div>
           </motion.div>
         )}

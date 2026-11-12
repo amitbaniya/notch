@@ -861,6 +861,130 @@ impl FpsMon {
     }
 }
 
+// ---- app icons (mixer + notifications) ----
+#[cfg(windows)]
+fn proc_path(pid: u32) -> Option<String> {
+    use windows::core::PWSTR;
+    use windows::Win32::{Foundation::CloseHandle, System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION}};
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut buf = [0u16; 520];
+        let mut n = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut n);
+        let _ = CloseHandle(h);
+        if ok.is_err() { return None; }
+        Some(String::from_utf16_lossy(&buf[..n as usize]))
+    }
+}
+
+// Store (packaged) apps have an AppUserModelID; the shell can turn that into the app's real logo.
+#[cfg(windows)]
+fn aumid_of(pid: u32) -> Option<String> {
+    use windows::core::PWSTR;
+    use windows::Win32::{Foundation::CloseHandle, Storage::Packaging::Appx::GetApplicationUserModelId, System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION}};
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut buf = [0u16; 512];
+        let mut n = buf.len() as u32;
+        let rc = GetApplicationUserModelId(h, &mut n, PWSTR(buf.as_mut_ptr()));
+        let _ = CloseHandle(h);
+        if rc.0 != 0 || n == 0 { return None; }
+        Some(String::from_utf16_lossy(&buf[..(n as usize).saturating_sub(1)]))
+    }
+}
+
+// "chrome.exe" -> its install path, from the App Paths registry key.
+#[cfg(windows)]
+fn app_path(exe: &str) -> Option<String> {
+    for hive in ["HKLM", "HKCU"] {
+        let o = run("reg", &["query", &format!("{}\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{}", hive, exe), "/ve"]);
+        if let Some(l) = o.lines().find(|l| l.contains("REG_SZ")) {
+            if let Some((_, v)) = l.split_once("REG_SZ") {
+                let v = v.trim().trim_matches('"');
+                if !v.is_empty() { return Some(v.to_string()); }
+            }
+        }
+    }
+    None
+}
+
+// Asks the shell for the icon of a path or "shell:AppsFolder\\<AUMID>" and encodes it as a PNG data URL.
+#[cfg(windows)]
+fn shell_icon(name: &str) -> Option<String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    use std::ffi::c_void;
+    use windows::core::HSTRING;
+    use windows::Win32::{Foundation::{HWND, SIZE}, Graphics::Gdi::{DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, HGDIOBJ},
+        System::Com::IBindCtx, UI::Shell::{IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK, SIIGBF_ICONONLY}};
+    unsafe {
+        let f: IShellItemImageFactory = SHCreateItemFromParsingName(&HSTRING::from(name), None::<&IBindCtx>).ok()?;
+        let hbm = f.GetImage(SIZE { cx: 64, cy: 64 }, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK).ok()?;
+        let mut bm = BITMAP::default();
+        if GetObjectW(HGDIOBJ(hbm.0), std::mem::size_of::<BITMAP>() as i32, Some(&mut bm as *mut _ as *mut c_void)) == 0 {
+            let _ = DeleteObject(HGDIOBJ(hbm.0));
+            return None;
+        }
+        let (w, h) = (bm.bmWidth, bm.bmHeight);
+        let mut bmi = BITMAPINFO { bmiHeader: BITMAPINFOHEADER { biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32, biWidth: w, biHeight: -h, biPlanes: 1, biBitCount: 32, biCompression: 0, ..Default::default() }, ..Default::default() };
+        let mut px = vec![0u8; (w * h * 4) as usize];
+        let hdc = GetDC(HWND::default());
+        let got = GetDIBits(hdc, hbm, 0, h as u32, Some(px.as_mut_ptr() as *mut c_void), &mut bmi, DIB_RGB_COLORS);
+        ReleaseDC(HWND::default(), hdc);
+        let _ = DeleteObject(HGDIOBJ(hbm.0));
+        if got == 0 { return None; }
+        for p in px.chunks_exact_mut(4) { p.swap(0, 2); } // BGRA -> RGBA
+        if px.chunks_exact(4).all(|p| p[3] == 0) { return None; } // fully transparent = no icon
+        let mut out = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut out, w as u32, h as u32);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut wr = enc.write_header().ok()?;
+            wr.write_image_data(&px).ok()?;
+            let _ = wr.finish();
+        }
+        Some(format!("data:image/png;base64,{}", STANDARD.encode(&out)))
+    }
+}
+
+#[cfg(windows)]
+fn icon_data_url(kind: &str, arg: &str) -> Option<String> {
+    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+    unsafe { let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED); }
+    let r = (|| -> Option<String> {
+        let mut tries: Vec<String> = Vec::new();
+        if kind == "pid" {
+            let pid: u32 = arg.parse().ok()?;
+            if let Some(a) = aumid_of(pid) { tries.push(format!("shell:AppsFolder\\{}", a)); }
+            if let Some(p) = proc_path(pid) { tries.push(p); }
+        } else {
+            tries.push(format!("shell:AppsFolder\\{}", arg));
+            if !arg.contains('!') && !arg.contains('\\') {
+                let exe = if arg.to_lowercase().ends_with(".exe") { arg.to_string() } else { format!("{}.exe", arg) };
+                if let Some(p) = app_path(&exe) { tries.push(p); }
+            }
+        }
+        tries.into_iter().find_map(|t| shell_icon(&t))
+    })();
+    unsafe { CoUninitialize(); }
+    r
+}
+
+#[tauri::command]
+async fn get_icon(kind: String, arg: String) -> String {
+    #[cfg(windows)]
+    {
+        static CACHE: Mutex<Option<std::collections::HashMap<String, String>>> = Mutex::new(None);
+        let key = format!("{}:{}", kind, arg);
+        if let Ok(g) = CACHE.lock() { if let Some(v) = g.as_ref().and_then(|m| m.get(&key)) { return v.clone(); } }
+        let r = std::thread::spawn(move || icon_data_url(&kind, &arg)).join().ok().flatten().unwrap_or_default();
+        if !r.is_empty() { if let Ok(mut g) = CACHE.lock() { g.get_or_insert_with(Default::default).insert(key, r.clone()); } }
+        return r;
+    }
+    #[cfg(not(windows))]
+    { let _ = (kind, arg); String::new() }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -872,7 +996,7 @@ fn main() {
         .manage(Arc::new(Share::default()))
         .manage(HudWant(Arc::new(AtomicBool::new(false))))
         .manage(FpsStatus(Arc::new(Mutex::new(String::from("idle")))))
-        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, get_sessions, set_app_volume, set_app_mute, set_hud_want, quit_app, clip_seq, fps_status, enable_fps_access, fps_access])
+        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, get_sessions, set_app_volume, set_app_mute, set_hud_want, quit_app, clip_seq, fps_status, enable_fps_access, fps_access, get_icon])
         .setup(|app| {
             let win = app.get_webview_window("main").unwrap();
             if let Ok(Some(mon)) = win.primary_monitor() {
