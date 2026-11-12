@@ -120,7 +120,7 @@ fn get_clip_files() -> Vec<String> {
 struct Share { files: Mutex<Vec<String>>, url: Mutex<String> }
 
 #[tauri::command]
-fn start_share(st: State<Arc<Share>>, paths: Vec<String>) -> String {
+fn start_share(app: tauri::AppHandle, st: State<Arc<Share>>, paths: Vec<String>) -> String {
     *st.files.lock().unwrap() = paths;
     let mut url = st.url.lock().unwrap();
     if url.is_empty() {
@@ -131,7 +131,12 @@ fn start_share(st: State<Arc<Share>>, paths: Vec<String>) -> String {
             .map(|a| a.ip().to_string()).unwrap_or_else(|_| "127.0.0.1".into());
         *url = format!("http://{}:{}/{}/", ip, port, token);
         let (sh, t) = (st.inner().clone(), token);
-        std::thread::spawn(move || { for s in l.incoming().flatten() { serve(s, &sh, &t); } });
+        std::thread::spawn(move || {
+            for s in l.incoming().flatten() {
+                let (sh, t, app) = (sh.clone(), t.clone(), app.clone());
+                std::thread::spawn(move || serve(s, &sh, &t, &app));
+            }
+        });
     }
     url.clone()
 }
@@ -139,36 +144,167 @@ fn start_share(st: State<Arc<Share>>, paths: Vec<String>) -> String {
 #[tauri::command]
 fn stop_share(st: State<Arc<Share>>) { st.files.lock().unwrap().clear(); }
 
-fn serve(mut s: TcpStream, sh: &Share, token: &str) {
-    let _ = s.set_read_timeout(Some(Duration::from_secs(2)));
-    let mut buf = [0u8; 2048];
-    let n = s.read(&mut buf).unwrap_or(0);
-    let req = String::from_utf8_lossy(&buf[..n]).to_string();
-    let path = req.split_whitespace().nth(1).unwrap_or("");
-    let Some(rest) = path.strip_prefix(&format!("/{}/", token)) else {
-        let _ = s.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n");
-        return;
-    };
-    let files = sh.files.lock().unwrap().clone();
-    if let Some(i) = rest.strip_prefix("f/").and_then(|x| x.parse::<usize>().ok()) {
-        if let Some(p) = files.get(i) {
-            if let Ok(data) = std::fs::read(p) {
-                let name = std::path::Path::new(p).file_name().map(|n| n.to_string_lossy().replace('"', "")).unwrap_or_default();
-                let h = format!("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=\"{}\"\r\nContent-Length: {}\r\n\r\n", name, data.len());
-                let _ = s.write_all(h.as_bytes()).and_then(|_| s.write_all(&data));
-                return;
-            }
+const SHARE_PAGE: &str = r##"<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1b1210"><title>Notch Shelf</title><style>
+:root{color-scheme:dark;--card:#ffffff12;--fg:#f4e9e4;--dim:#b9a39a;--acc:#ffb38a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;min-height:100vh;color:var(--fg);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;
+background:radial-gradient(120% 70% at 50% -10%,#3d2621,#150d0b);padding:calc(10px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom))}
+header{padding:20px 4px 6px}h1{margin:0;font-size:28px;letter-spacing:-.5px}.sub{color:var(--dim)}
+.sec{margin:22px 0 10px;font-size:12px;letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
+a.card{display:flex;align-items:center;gap:14px;background:var(--card);border-radius:18px;padding:12px;text-decoration:none;color:inherit;margin-bottom:10px;border:1px solid #ffffff10}
+a.card:active{background:#ffffff22}
+.th{width:54px;height:54px;border-radius:13px;background:#ffffff14;display:grid;place-items:center;overflow:hidden;flex:none;font-size:11px;font-weight:700;color:var(--acc)}
+.th img{width:100%;height:100%;object-fit:cover}
+.meta{min-width:0;flex:1}.name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.size{color:var(--dim);font-size:13px}
+.dl{flex:none;width:42px;height:42px;border-radius:50%;background:#ffffff1f;display:grid;place-items:center}
+.btn{display:block;width:100%;border:0;border-radius:16px;padding:15px;font:inherit;font-weight:600;text-align:center;background:#ffffff26;color:var(--fg);margin-top:6px}
+.btn.pri{background:var(--acc);color:#2a1a16}.btn:active{filter:brightness(.9)}
+.empty{color:var(--dim);padding:12px 4px}
+.up{background:var(--card);border-radius:14px;padding:10px 12px;margin-top:8px;font-size:14px;word-break:break-all}
+.bar{height:6px;background:#ffffff1f;border-radius:3px;margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .1s}
+</style></head><body>
+<header><h1>Notch Shelf</h1><div class="sub">__COUNT__ on your PC</div></header>
+<div class="sec">On your PC</div>
+__FILES__
+__ALL__
+<div class="sec">Send to your PC</div>
+<label class="btn pri">Choose files to send<input id="pick" type="file" multiple hidden></label>
+<div id="ups"></div>
+<div class="sub" style="margin-top:10px;font-size:13px">Files you send are saved in Downloads\Notch and appear on your shelf.</div>
+<script>
+const base=location.pathname;
+async function send(files){for(const f of files){const row=document.createElement("div");row.className="up";
+row.innerHTML="<div></div><div class='bar'><i></i></div>";row.firstChild.textContent=f.name;document.getElementById("ups").prepend(row);
+await new Promise(res=>{const x=new XMLHttpRequest();x.open("POST",base+"u?name="+encodeURIComponent(f.name));
+x.upload.onprogress=e=>{if(e.lengthComputable)row.querySelector("i").style.width=(e.loaded/e.total*100)+"%"};
+x.onload=()=>{row.firstChild.textContent=f.name+(x.status==200?"  - sent":"  - failed");res()};
+x.onerror=()=>{row.firstChild.textContent=f.name+"  - failed";res()};x.send(f)})}}
+document.getElementById("pick").onchange=e=>send(e.target.files);
+async function dlAll(){for(const l of document.querySelectorAll("a.card")){const t=document.createElement("a");t.href=l.href;t.download="";document.body.appendChild(t);t.click();t.remove();await new Promise(r=>setTimeout(r,700))}}
+</script></body></html>"##;
+
+fn http(s: &mut TcpStream, status: &str, ctype: &str, extra: &str, body: &[u8]) {
+    let h = format!("HTTP/1.1 {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n{}\r\n", status, ctype, body.len(), extra);
+    let _ = s.write_all(h.as_bytes()).and_then(|_| s.write_all(body));
+}
+
+fn pct_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let Some(v) = std::str::from_utf8(&b[i + 1..i + 3]).ok().and_then(|h| u8::from_str_radix(h, 16).ok()) { out.push(v); i += 3; continue; }
         }
-        let _ = s.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n");
-        return;
+        out.push(if b[i] == b'+' { b' ' } else { b[i] });
+        i += 1;
     }
-    let mut html = String::from("<meta name=viewport content='width=device-width,initial-scale=1'><body style='font:18px system-ui;padding:20px'><h2>Shelf</h2>");
+    String::from_utf8_lossy(&out).to_string()
+}
+
+fn pct_encode(s: &str) -> String {
+    s.bytes().map(|c| if c.is_ascii_alphanumeric() || b"-_.~".contains(&c) { (c as char).to_string() } else { format!("%{:02X}", c) }).collect()
+}
+
+fn esc(s: &str) -> String { s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;") }
+
+fn human(n: u64) -> String {
+    if n >= 1 << 30 { format!("{:.1} GB", n as f64 / (1u64 << 30) as f64) }
+    else if n >= 1 << 20 { format!("{:.1} MB", n as f64 / (1u64 << 20) as f64) }
+    else if n >= 1 << 10 { format!("{:.0} KB", n as f64 / 1024.0) }
+    else { format!("{} B", n) }
+}
+
+fn send_file(s: &mut TcpStream, p: Option<&String>, attach: bool) {
+    let Some(p) = p else { return http(s, "404 Not Found", "text/plain", "", b"Not found") };
+    let Ok(mut f) = std::fs::File::open(p) else { return http(s, "404 Not Found", "text/plain", "", b"Not found") };
+    let len = f.metadata().map(|m| m.len()).unwrap_or(0);
+    let path = std::path::Path::new(p);
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let ctype = if attach { "application/octet-stream" } else {
+        match ext.as_str() { "png" => "image/png", "jpg" | "jpeg" => "image/jpeg", "gif" => "image/gif", "webp" => "image/webp", "bmp" => "image/bmp", _ => "application/octet-stream" }
+    };
+    let ascii: String = name.chars().map(|c| if c.is_ascii() && c != '"' && !c.is_control() { c } else { '_' }).collect();
+    let extra = if attach { format!("Content-Disposition: attachment; filename=\"{}\"; filename*=UTF-8''{}\r\n", ascii, pct_encode(&name)) } else { String::new() };
+    let h = format!("HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n", ctype, len, extra);
+    if s.write_all(h.as_bytes()).is_ok() { let _ = std::io::copy(&mut f, s); }
+}
+
+// Phone -> PC: the page POSTs the raw file body; it is saved in Downloads\Notch and added to the shelf.
+fn upload(s: &mut TcpStream, query: &str, clen: u64, already: &[u8], tmp: &mut [u8], app: &tauri::AppHandle) {
+    let raw = query.split('&').find_map(|kv| kv.strip_prefix("name=")).map(pct_decode).unwrap_or_default();
+    let mut name: String = raw.rsplit(|c: char| c == '/' || c == '\\').next().unwrap_or("").chars()
+        .filter(|c| !c.is_control() && !"<>:\"|?*".contains(*c)).take(120).collect();
+    name = name.trim().trim_matches('.').to_string();
+    if name.is_empty() { name = "upload".into(); }
+    if clen == 0 || clen > 8_000_000_000 { return http(s, "400 Bad Request", "text/plain", "", b"Bad size"); }
+    let dir = std::env::var("USERPROFILE").map(|p| std::path::PathBuf::from(p).join("Downloads")).unwrap_or_else(|_| std::env::temp_dir()).join("Notch");
+    if std::fs::create_dir_all(&dir).is_err() { return http(s, "500 Internal Server Error", "text/plain", "", b"Cannot create folder"); }
+    let (stem, ext) = match name.rsplit_once('.') { Some((a, b)) if !a.is_empty() => (a.to_string(), format!(".{}", b)), _ => (name.clone(), String::new()) };
+    let mut path = dir.join(&name);
+    let mut k = 1;
+    while path.exists() { path = dir.join(format!("{} ({}){}", stem, k, ext)); k += 1; }
+    let Ok(mut f) = std::fs::File::create(&path) else { return http(s, "500 Internal Server Error", "text/plain", "", b"Cannot save") };
+    let mut left = clen;
+    let take = (already.len() as u64).min(left) as usize;
+    let mut ok = f.write_all(&already[..take]).is_ok();
+    left -= take as u64;
+    while ok && left > 0 {
+        let n = match s.read(tmp) { Ok(0) | Err(_) => break, Ok(n) => n };
+        let m = (n as u64).min(left) as usize;
+        ok = f.write_all(&tmp[..m]).is_ok();
+        left -= m as u64;
+    }
+    drop(f);
+    if ok && left == 0 {
+        let _ = app.emit("shelf-add", path.to_string_lossy().to_string());
+        http(s, "200 OK", "text/plain", "", b"ok");
+    } else {
+        let _ = std::fs::remove_file(&path);
+        http(s, "400 Bad Request", "text/plain", "", b"Upload incomplete");
+    }
+}
+
+fn serve(mut s: TcpStream, sh: &Share, token: &str, app: &tauri::AppHandle) {
+    let _ = s.set_read_timeout(Some(Duration::from_secs(30)));
+    let mut buf: Vec<u8> = Vec::new();
+    let mut tmp = vec![0u8; 65536];
+    let head_end = loop {
+        let n = match s.read(&mut tmp) { Ok(0) | Err(_) => return, Ok(n) => n };
+        buf.extend_from_slice(&tmp[..n]);
+        if let Some(p) = buf.windows(4).position(|w| w == b"\r\n\r\n") { break p + 4; }
+        if buf.len() > 32768 { return; }
+    };
+    let head = String::from_utf8_lossy(&buf[..head_end]).to_string();
+    let mut lines = head.lines();
+    let first = lines.next().unwrap_or("").to_string();
+    let clen: u64 = lines.filter_map(|l| { let (k, v) = l.split_once(':')?; if k.trim().eq_ignore_ascii_case("content-length") { v.trim().parse().ok() } else { None } }).next().unwrap_or(0);
+    let mut parts = first.split_whitespace();
+    let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+    let (route, query) = path.split_once('?').unwrap_or((path, ""));
+    let Some(rest) = route.strip_prefix(&format!("/{}/", token)) else { return http(&mut s, "404 Not Found", "text/plain", "", b"Not found") };
+    let files = sh.files.lock().map(|f| f.clone()).unwrap_or_default();
+    if method == "POST" && rest == "u" { return upload(&mut s, query, clen, &buf[head_end..], &mut tmp, app); }
+    let idx = |pre: &str| rest.strip_prefix(pre).and_then(|x| x.parse::<usize>().ok());
+    if let Some(i) = idx("f/") { return send_file(&mut s, files.get(i), true); }
+    if let Some(i) = idx("p/") { return send_file(&mut s, files.get(i), false); }
+    let mut cards = String::new();
     for (i, p) in files.iter().enumerate() {
-        let n = std::path::Path::new(p).file_name().map(|n| n.to_string_lossy().replace('<', "&lt;")).unwrap_or_default();
-        html.push_str(&format!("<p><a href='f/{}'>{}</a></p>", i, n));
+        let path = std::path::Path::new(p);
+        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        let size = std::fs::metadata(p).map(|m| human(m.len())).unwrap_or_else(|_| "missing".into());
+        let thumb = if ["png", "jpg", "jpeg", "gif", "webp", "bmp"].contains(&ext.as_str()) { format!("<img src=\"p/{}\" loading=\"lazy\" alt=\"\">", i) }
+            else { format!("<span>{}</span>", esc(&ext.chars().take(4).collect::<String>().to_uppercase())) };
+        cards.push_str(&format!("<a class=\"card\" href=\"f/{}\" download><span class=\"th\">{}</span><span class=\"meta\"><div class=\"name\">{}</div><div class=\"size\">{}</div></span><span class=\"dl\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 4v12M6 11l6 6 6-6M5 20h14\"/></svg></span></a>", i, thumb, esc(&name), size));
     }
-    let h = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}", html.len(), html);
-    let _ = s.write_all(h.as_bytes());
+    if cards.is_empty() { cards = "<div class=\"empty\">Nothing on the shelf yet. Drag files onto Notch on your PC.</div>".into(); }
+    let all = if files.len() > 1 { "<button class=\"btn\" onclick=\"dlAll()\">Download all</button>" } else { "" };
+    let page = SHARE_PAGE.replace("__COUNT__", &format!("{} file{}", files.len(), if files.len() == 1 { "" } else { "s" })).replace("__FILES__", &cards).replace("__ALL__", all);
+    http(&mut s, "200 OK", "text/html; charset=utf-8", "", page.as_bytes());
 }
 
 #[cfg(windows)]

@@ -24,3 +24,6 @@ from https://github.com/GameTechDev/PresentMon/releases/tag/v2.6.0).
 It reads Windows' graphics event trace, which needs permission: Settings > "Set up access" adds your account to the
 "Performance Log Users" group (one admin prompt, then sign out and in), or run Notch as administrator.
 Security software may flag the tool; it is only started while a fullscreen game is in front and the gaming bar is on.
+
+## Send to phone
+The QR code opens a page on your PC (same Wi-Fi only, random link). Phones can download shelf files (with image previews, sizes, Download all) and send files back; those are saved in Downloads\Notch and added to the shelf.

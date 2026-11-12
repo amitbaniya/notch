@@ -238,6 +238,14 @@ export default function App() {
     return () => { un.then((f) => f()); };
   }, []);
 
+  useEffect(() => { // a file sent from the phone lands on the shelf and slides out as a notification
+    const un = listen<string>("shelf-add", (e) => {
+      setShelf((s) => Array.from(new Set([...s, e.payload])));
+      if (!open) setPeek({ id: -2, app: "Notch", title: "From your phone", body: `${e.payload.split(/[\\/]/).pop()} is on the shelf`, at: Date.now() });
+    });
+    return () => { un.then((f) => f()); };
+  }, [open]);
+
   let body: JSX.Element;
   if (tab === "music") body = <Music m={m} at={at} art={art} bar={cfg.bar} />;
   else if (tab === "tools") body = <Tools />;

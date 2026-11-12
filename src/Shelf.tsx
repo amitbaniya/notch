@@ -37,7 +37,7 @@ export function Shelf({ files, setFiles }: { files: string[]; setFiles: (f: stri
             ))}
           </div>
         )}
-        {qr && <div className="qr"><img src={qr} alt="QR code" /><span className="sub">Scan on the same Wi-Fi</span></div>}
+        {qr && <div className="qr"><img src={qr} alt="QR code" /><span className="sub">Scan on the same Wi-Fi</span><span className="sub" style={{ fontSize: 11, wordBreak: "break-all", maxWidth: 150, textAlign: "center" }}>{url}</span></div>}
       </div>
     </div>
   );
