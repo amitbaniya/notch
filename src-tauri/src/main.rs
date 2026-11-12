@@ -60,7 +60,7 @@ async fn get_art() -> String {
             rd.LoadAsync(n)?.get()?;
             let mut b = vec![0u8; n as usize];
             rd.ReadBytes(&mut b)?;
-            let kind = if b.first() == Some(&0x89) { "png" } else { "jpeg" };
+            let kind = match (b.first(), b.get(1)) { (Some(0x89), _) => "png", (Some(0xFF), Some(0xD8)) => "jpeg", (Some(b'G'), _) => "gif", (Some(b'B'), Some(b'M')) => "bmp", (Some(b'R'), _) => "webp", _ => "jpeg" };
             Ok(format!("data:image/{};base64,{}", kind, STANDARD.encode(b)))
         })();
         return r.unwrap_or_default();
@@ -733,6 +733,28 @@ fn clip_seq() -> u32 {
 
 struct FpsStatus(Arc<Mutex<String>>);
 
+#[cfg(windows)]
+static FPS_ACCESS: Mutex<Option<(std::time::Instant, String)>> = Mutex::new(None);
+
+// Whether this account may read frame timings: "active" (already works), "pending" (added to the group, needs sign-out/in) or "none".
+#[tauri::command]
+async fn fps_access() -> String {
+    #[cfg(windows)]
+    {
+        if let Ok(g) = FPS_ACCESS.lock() { if let Some((t, v)) = g.as_ref() { if t.elapsed() < Duration::from_secs(20) { return v.clone(); } } }
+        let groups = run("whoami", &["/groups", "/fo", "csv", "/nh"]);
+        let v: String = (if groups.contains("S-1-5-32-559") || groups.contains("S-1-16-12288") { "active" } else {
+            let me = run("whoami", &[]).to_lowercase();
+            let members = run("powershell", &["-NoProfile", "-Command", "(Get-LocalGroupMember -SID S-1-5-32-559 -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) -join ';'"]).to_lowercase();
+            if !me.is_empty() && members.split(';').any(|m| m.trim() == me) { "pending" } else { "none" }
+        }).to_string();
+        if let Ok(mut g) = FPS_ACCESS.lock() { *g = Some((std::time::Instant::now(), v.clone())); }
+        return v;
+    }
+    #[cfg(not(windows))]
+    String::from("none")
+}
+
 // "ok" | "idle" | "denied" | "missing"
 #[tauri::command]
 fn fps_status(s: State<FpsStatus>) -> String { s.0.lock().map(|x| x.clone()).unwrap_or_default() }
@@ -745,9 +767,10 @@ async fn enable_fps_access() {
     {
         let me = run("whoami", &[]);
         if me.is_empty() { return; }
-        let inner = format!("Add-LocalGroupMember -Group 'Performance Log Users' -Member '{}' -ErrorAction SilentlyContinue", me.replace('\'', ""));
+        let inner = format!("Add-LocalGroupMember -SID S-1-5-32-559 -Member '{}' -ErrorAction SilentlyContinue", me.replace('\'', ""));
         let outer = format!("Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList '-NoProfile','-Command','{}'", inner.replace('\'', "''"));
         run("powershell", &["-NoProfile", "-Command", &outer]);
+        if let Ok(mut g) = FPS_ACCESS.lock() { *g = None; }
     }
 }
 
@@ -849,7 +872,7 @@ fn main() {
         .manage(Arc::new(Share::default()))
         .manage(HudWant(Arc::new(AtomicBool::new(false))))
         .manage(FpsStatus(Arc::new(Mutex::new(String::from("idle")))))
-        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, get_sessions, set_app_volume, set_app_mute, set_hud_want, quit_app, clip_seq, fps_status, enable_fps_access])
+        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, get_sessions, set_app_volume, set_app_mute, set_hud_want, quit_app, clip_seq, fps_status, enable_fps_access, fps_access])
         .setup(|app| {
             let win = app.get_webview_window("main").unwrap();
             if let Ok(Some(mon)) = win.primary_monitor() {

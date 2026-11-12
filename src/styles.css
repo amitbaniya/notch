@@ -239,3 +239,5 @@ button,input{font:inherit;color:inherit}
 .vr:hover::-webkit-slider-thumb,.vr:active::-webkit-slider-thumb{opacity:1}
 
 .qbtn{flex:none;background:#ff453a33;border:0;color:#fff;border-radius:16px;padding:7px 16px;cursor:pointer}.qbtn:hover{background:#ff453a66}
+
+.okpill{display:inline-block;margin-top:2px;padding:5px 14px;border-radius:14px;background:#ffffff1f;color:var(--fg);font-size:13px}

@@ -172,6 +172,7 @@ export default function App() {
   const [m, setM] = useState<Media>({ title: "", artist: "", playing: false, active: false, pos: 0, dur: 0 });
   const [at, setAt] = useState(Date.now());
   const [art, setArt] = useState(""); const [col, setCol] = useState("");
+  const [artTry, setArtTry] = useState(0);
   const clip = useClipHistory();
   const [snips, setSnips] = useState<Clip[]>(() => load("snips", []));
   const [shelf, setShelf] = useState<string[]>(() => load("shelf", []));
@@ -227,10 +228,20 @@ export default function App() {
     const poll = () => invoke<Media>("get_media").then((x) => { setM(x); setAt(Date.now()); }).catch(() => {});
     poll(); const i = setInterval(poll, open ? 1000 : disabled || hud ? 8000 : m.active ? 2500 : 5000); return () => clearInterval(i);
   }, [open, disabled, hud, m.active]);
+  useEffect(() => { setArtTry(0); }, [m.title, m.artist]);
   useEffect(() => {
+    // Players often publish the cover a moment after the title, or briefly report the previous one:
+    // look again a couple of times, and keep retrying while there is no cover at all.
     if (!m.title) { setArt(""); setCol(""); return; }
-    invoke<string>("get_art").then((a) => { setArt(a); if (a) avgColor(a).then(setCol); else setCol(""); }).catch(() => {});
-  }, [m.title, m.artist]);
+    let dead = false, tm = 0;
+    invoke<string>("get_art").then((a) => {
+      if (dead) return;
+      setArt(a);
+      if (a) avgColor(a).then((c) => { if (!dead) setCol(c); }); else setCol("");
+      if (artTry < (a ? 2 : 8)) tm = window.setTimeout(() => setArtTry((n) => n + 1), 1500);
+    }).catch(() => {});
+    return () => { dead = true; clearTimeout(tm); };
+  }, [m.title, m.artist, artTry]);
   useEffect(() => save("snips", snips), [snips]);
   useEffect(() => save("shelf", shelf), [shelf]);
   useEffect(() => {

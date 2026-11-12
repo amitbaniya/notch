@@ -33,6 +33,12 @@ export function Settings({ cfg, set, enabled, setEnabled, onTestPeek }: { cfg: C
   const [auto, setAuto] = useState(false);
   const [sure, setSure] = useState(false);
   const [fps, setFps] = useState("idle");
+  const [access, setAccess] = useState("");
+  useEffect(() => { // is FPS access already set up? re-check every 6s until it is
+    let dead = false, t = 0;
+    const check = () => invoke<string>("fps_access").then((v) => { if (dead) return; setAccess(v); t = window.setTimeout(check, v === "active" ? 60000 : 6000); }).catch(() => {});
+    check(); return () => { dead = true; clearTimeout(t); };
+  }, []);
   useEffect(() => {
     const p = () => invoke<string>("fps_status").then(setFps).catch(() => {});
     p(); const i = setInterval(p, 2000); return () => clearInterval(i);
@@ -90,8 +96,14 @@ export function Settings({ cfg, set, enabled, setEnabled, onTestPeek }: { cfg: C
       <Row title="Gaming bar" desc="A stats strip (CPU, GPU, RAM, network, clock) while a game is fullscreen. Hovering never opens the island then; use the arrow at the bar's right end.">
         <Seg v={cfg.hud} set={up("hud")} opts={[["auto", "Auto"], ["always", "Always"], ["off", "Off"]]} />
       </Row>
-      <Row title="FPS counter" desc={FPS_TEXT[fps] ?? FPS_TEXT.idle}>
-        {(fps === "denied" || fps === "idle") && <button className="pill2" onClick={() => invoke("enable_fps_access")}>Set up access (admin, once)</button>}
+      <Row title="FPS counter" desc={
+        fps === "missing" ? FPS_TEXT.missing
+        : fps === "ok" ? FPS_TEXT.ok
+        : access === "active" ? "Already set up. FPS appears in the gaming bar once a game is running."
+        : access === "pending" ? "Access granted. Sign out and back in to finish setting it up."
+        : "FPS needs permission to read Windows' graphics events. Set it up once (asks for administrator), then sign out and back in."}>
+        {fps !== "missing" && access === "none" && fps !== "ok" && <button className="pill2" onClick={() => { invoke("enable_fps_access"); window.setTimeout(() => invoke<string>("fps_access").then(setAccess).catch(() => {}), 5000); }}>Set up access (admin, once)</button>}
+        {(access === "active" || access === "pending" || fps === "ok") && fps !== "missing" && <span className="okpill">{access === "pending" ? "Sign out and back in" : "Already set up"}</span>}
       </Row>
       <Row title="Gaming bar size" desc="Scales the stats strip, keeping its proportions.">
         <Slider v={cfg.sizeHud} min={40} max={105} set={up("sizeHud")} label="Gaming bar size" />
