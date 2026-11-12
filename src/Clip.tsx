@@ -25,10 +25,14 @@ export function useClipHistory() {
   const [items, setItems] = useState<Clip[]>([]);
   const last = useRef("");
   useEffect(() => {
-    let busy = false, n = 0;
+    let busy = false, seq = -1;
     const i = setInterval(async () => {
       if (busy) return; busy = true;
       try {
+        // Windows' clipboard change counter: skip all the reading when nothing was copied since last time.
+        const q = await invoke<number>("clip_seq").catch(() => 0);
+        if (q !== 0 && q === seq) { busy = false; return; }
+        seq = q;
         let files: string[] = [];
         try { files = await invoke<string[]>("get_clip_files"); } catch {}
         let c: Omit<Clip, "id" | "at"> | null = null, key = "";
@@ -36,7 +40,7 @@ export function useClipHistory() {
         else {
           let t = ""; try { t = ((await readText()) || "").trim(); } catch {}
           if (t) { key = "t:" + t; c = { kind: isLink(t) ? "link" : "text", text: t }; }
-          else if (++n % 3 === 0) { // images are heavier, so check every 3s
+          else {
             try { const img = await readImage(); const r = await thumbOf(img); await img.close(); key = "i:" + r.key; c = { kind: "image", thumb: r.thumb, w: r.w, h: r.h }; } catch {}
           }
         }

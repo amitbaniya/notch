@@ -361,7 +361,7 @@ async fn open_site(app: tauri::AppHandle, label: String, url: String, title: Str
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct Notif { id: i64, app: String, title: String, body: String, at: i64 }
 
 #[tauri::command]
@@ -377,6 +377,12 @@ async fn get_notifications() -> Vec<Notif> {
 fn read_notifs() -> Option<Vec<Notif>> {
     use rusqlite::types::ValueRef;
     let dir = std::path::PathBuf::from(std::env::var("LOCALAPPDATA").ok()?).join("Microsoft\\Windows\\Notifications");
+    // Cheap change check: only copy and parse the database when Windows has modified it.
+    static CACHE: Mutex<Option<(((u128, u64), (u128, u64)), Vec<Notif>)>> = Mutex::new(None);
+    let sig = |f: &str| std::fs::metadata(dir.join(f)).ok()
+        .map(|m| (m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos()).unwrap_or(0), m.len())).unwrap_or((0, 0));
+    let key = (sig("wpndatabase.db"), sig("wpndatabase.db-wal"));
+    if let Ok(g) = CACHE.lock() { if let Some((k, v)) = g.as_ref() { if *k == key { return Some(v.clone()); } } }
     let tmp = std::env::temp_dir().join("notch-wpn");
     std::fs::create_dir_all(&tmp).ok()?;
     for f in ["wpndatabase.db", "wpndatabase.db-wal", "wpndatabase.db-shm"] {
@@ -398,6 +404,7 @@ fn read_notifs() -> Option<Vec<Notif>> {
         if t.is_empty() { continue; }
         out.push(Notif { id, app, title: t[0].clone(), body: t[1..].join(" "), at: ft / 10_000 - 11_644_473_600_000 });
     }
+    if let Ok(mut c) = CACHE.lock() { *c = Some((key, out.clone())); }
     Some(out)
 }
 
@@ -539,17 +546,24 @@ struct Stats { cpu: f32, ram: f32, net: f32, gpu: Option<f32>, gpu_t: Option<f32
 
 // Every second: tell the UI whether a game is fullscreen; while the gaming bar is shown, also send stats.
 // GPU numbers come from nvidia-smi (NVIDIA only). FPS isn't available yet.
-fn stats_loop(app: tauri::AppHandle, want: Arc<AtomicBool>) {
+fn stats_loop(app: tauri::AppHandle, want: Arc<AtomicBool>, status: Arc<Mutex<String>>) {
     #[cfg(windows)]
     {
         let mut sys = sysinfo::System::new();
+        let exe = presentmon_path(&app);
+        let mut fpsmon = FpsMon::new();
         let (mut last_rx, mut last_g, mut streak) = (0u64, false, 0u32);
         loop {
             std::thread::sleep(Duration::from_secs(1));
             streak = if fullscreen_game() { streak + 1 } else { 0 };
             let g = streak >= 2; // must hold for 2 seconds, so brief fullscreen windows don't flash the bar
             if g != last_g { last_g = g; let _ = app.emit("gaming", g); }
-            if !want.load(Ordering::Relaxed) { last_rx = 0; continue; }
+            if !want.load(Ordering::Relaxed) {
+                last_rx = 0;
+                fpsmon.stop();
+                if exe.is_none() { if let Ok(mut s) = status.lock() { *s = "missing".into(); } }
+                continue;
+            }
             sys.refresh_cpu_usage();
             sys.refresh_memory();
             let ram = if sys.total_memory() > 0 { sys.used_memory() as f32 / sys.total_memory() as f32 * 100.0 } else { 0.0 };
@@ -559,15 +573,134 @@ fn stats_loop(app: tauri::AppHandle, want: Arc<AtomicBool>) {
             let o = run("nvidia-smi", &["--query-gpu=utilization.gpu,temperature.gpu", "--format=csv,noheader,nounits"]);
             let mut p = o.split(',').map(|x| x.trim().parse::<f32>().ok());
             let (gpu, gpu_t) = (p.next().flatten(), p.next().flatten());
-            let _ = app.emit("stats", Stats { cpu: sys.global_cpu_usage(), ram, net, gpu, gpu_t, fps: None });
+            // FPS is only measured while a fullscreen game is detected, so there is no cost on the desktop.
+            let (fps, st) = fpsmon.tick(exe.as_deref(), if last_g { foreground_pid() } else { None });
+            if let Ok(mut s) = status.lock() { *s = st.to_string(); }
+            let _ = app.emit("stats", Stats { cpu: sys.global_cpu_usage(), ram, net, gpu, gpu_t, fps });
         }
     }
     #[cfg(not(windows))]
-    { let _ = (app, want); }
+    { let _ = (app, want, status); }
 }
 
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) { app.exit(0); }
+
+// Windows' clipboard change counter: lets the app skip reading the clipboard when nothing was copied.
+#[tauri::command]
+fn clip_seq() -> u32 {
+    #[cfg(windows)]
+    return clipboard_win::seq_num().map(|n| n.get()).unwrap_or(0);
+    #[cfg(not(windows))]
+    0
+}
+
+struct FpsStatus(Arc<Mutex<String>>);
+
+// "ok" | "idle" | "denied" | "missing"
+#[tauri::command]
+fn fps_status(s: State<FpsStatus>) -> String { s.0.lock().map(|x| x.clone()).unwrap_or_default() }
+
+// Reading frame timings needs permission to Windows' graphics event trace. One-time fix: add this user to the
+// "Performance Log Users" group (asks for administrator once; takes effect after signing out and in).
+#[tauri::command]
+async fn enable_fps_access() {
+    #[cfg(windows)]
+    {
+        let me = run("whoami", &[]);
+        if me.is_empty() { return; }
+        let inner = format!("Add-LocalGroupMember -Group 'Performance Log Users' -Member '{}' -ErrorAction SilentlyContinue", me.replace('\'', ""));
+        let outer = format!("Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList '-NoProfile','-Command','{}'", inner.replace('\'', "''"));
+        run("powershell", &["-NoProfile", "-Command", &outer]);
+    }
+}
+
+#[cfg(windows)]
+fn presentmon_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    let mut c: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(r) = app.path().resource_dir() { c.push(r.join("resources").join("PresentMon.exe")); c.push(r.join("PresentMon.exe")); }
+    if let Ok(e) = std::env::current_exe() {
+        if let Some(d) = e.parent() { c.push(d.join("PresentMon.exe")); c.push(d.join("resources").join("PresentMon.exe")); }
+    }
+    c.push(std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/resources/PresentMon.exe")));
+    c.into_iter().find(|p| p.exists())
+}
+
+#[cfg(windows)]
+fn foreground_pid() -> Option<u32> {
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    unsafe {
+        let h = GetForegroundWindow();
+        if h.is_invalid() { return None; }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(h, Some(&mut pid as *mut u32));
+        if pid == 0 { return None; }
+        let n = proc_name(pid).to_lowercase();
+        if ["explorer", "notch", "searchhost", "shellexperiencehost", "startmenuexperiencehost", "textinputhost", "applicationframehost", "dwm"].contains(&n.as_str()) { None } else { Some(pid) }
+    }
+}
+
+// Runs Intel's PresentMon for the game that is in front and counts the frames it reports per second.
+#[cfg(windows)]
+struct FpsMon {
+    child: Option<std::process::Child>,
+    pid: u32,
+    denied: bool,
+    frames: Arc<Mutex<std::collections::VecDeque<std::time::Instant>>>,
+}
+
+#[cfg(windows)]
+impl FpsMon {
+    fn new() -> Self { FpsMon { child: None, pid: 0, denied: false, frames: Arc::new(Mutex::new(std::collections::VecDeque::new())) } }
+
+    fn stop(&mut self) {
+        if let Some(mut c) = self.child.take() { let _ = c.kill(); let _ = c.wait(); }
+        self.pid = 0;
+        self.denied = false;
+        if let Ok(mut f) = self.frames.lock() { f.clear(); }
+    }
+
+    fn tick(&mut self, exe: Option<&std::path::Path>, pid: Option<u32>) -> (Option<f32>, &'static str) {
+        use std::io::BufRead;
+        use std::os::windows::process::CommandExt;
+        use std::process::{Command, Stdio};
+        let Some(exe) = exe else { return (None, "missing") };
+        let Some(pid) = pid else { self.stop(); return (None, "idle") };
+        if pid != self.pid {
+            self.stop();
+            let spawned = Command::new(exe)
+                .args(["--process_id", &pid.to_string(), "--output_stdout", "--stop_existing_session", "--terminate_on_proc_exit", "--session_name", "notch_fps"])
+                .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).creation_flags(0x08000000).spawn();
+            self.pid = pid;
+            match spawned {
+                Ok(mut c) => {
+                    if let Some(out) = c.stdout.take() {
+                        let frames = self.frames.clone();
+                        std::thread::spawn(move || {
+                            for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+                                // one CSV row per presented frame; the first line is the header
+                                if line.matches(',').count() >= 3 && !line.starts_with("Application") {
+                                    if let Ok(mut f) = frames.lock() { f.push_back(std::time::Instant::now()); while f.len() > 2000 { f.pop_front(); } }
+                                }
+                            }
+                        });
+                    }
+                    self.child = Some(c);
+                }
+                Err(_) => self.denied = true,
+            }
+        }
+        let mut exited = false;
+        if let Some(c) = self.child.as_mut() { if let Ok(Some(_)) = c.try_wait() { exited = true; } }
+        let now = std::time::Instant::now();
+        let n = match self.frames.lock() {
+            Ok(mut f) => { while f.front().map_or(false, |t| now.duration_since(*t) > Duration::from_secs(1)) { f.pop_front(); } f.len() }
+            Err(_) => 0,
+        };
+        if exited { self.child = None; if n == 0 { self.denied = true; } }
+        if n > 0 { (Some(n as f32), "ok") } else if self.denied { (None, "denied") } else { (None, "idle") }
+    }
+}
 
 fn main() {
     tauri::Builder::default()
@@ -579,7 +712,8 @@ fn main() {
         .manage(Expanded(Arc::new(AtomicBool::new(false)), Arc::new(AtomicU32::new(280)), Arc::new(AtomicU32::new(0)), Arc::new(AtomicU32::new(100)), Arc::new(AtomicU32::new(56)), Arc::new(AtomicI32::new(0))))
         .manage(Arc::new(Share::default()))
         .manage(HudWant(Arc::new(AtomicBool::new(false))))
-        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, get_sessions, set_app_volume, set_app_mute, set_hud_want, quit_app])
+        .manage(FpsStatus(Arc::new(Mutex::new(String::from("idle")))))
+        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, get_sessions, set_app_volume, set_app_mute, set_hud_want, quit_app, clip_seq, fps_status, enable_fps_access])
         .setup(|app| {
             let win = app.get_webview_window("main").unwrap();
             if let Ok(Some(mon)) = win.primary_monitor() {
@@ -598,8 +732,9 @@ fn main() {
             // The window is click-through; poll the cursor to detect hover over the island.
             std::thread::spawn(move || {
                 let mut last = false;
+                let mut nap = 30u64;
                 loop {
-                    std::thread::sleep(Duration::from_millis(30));
+                    std::thread::sleep(Duration::from_millis(nap));
                     let (Ok(c), Ok(p), Ok(sz)) = (win.cursor_position(), win.outer_position(), win.outer_size()) else { continue };
                     let sf = win.scale_factor().unwrap_or(1.0);
                     let lx = (c.x - p.x as f64) / sf;
@@ -608,6 +743,7 @@ fn main() {
                     let (w, h) = if exp.load(Ordering::Relaxed) { (640.0 * sv.load(Ordering::Relaxed) as f64 / 100.0, 270.0 * sv.load(Ordering::Relaxed) as f64 / 100.0 + topv.load(Ordering::Relaxed) as f64) } else { (cwv.load(Ordering::Relaxed) as f64, chv.load(Ordering::Relaxed) as f64) };
                     let ox = if exp.load(Ordering::Relaxed) { 0.0 } else { oxv.load(Ordering::Relaxed) as f64 };
                     let inside = lx >= (ww - w) / 2.0 + ox && lx <= (ww + w) / 2.0 + ox && ly >= 0.0 && ly <= h;
+                    nap = if inside || (ly > -80.0 && ly < 340.0) { 30 } else { 100 };
                     if inside != last {
                         last = inside;
                         let _ = win.set_ignore_cursor_events(!inside);
@@ -615,8 +751,8 @@ fn main() {
                     }
                 }
             });
-            let (h2, want) = (app.handle().clone(), app.state::<HudWant>().0.clone());
-            std::thread::spawn(move || stats_loop(h2, want));
+            let (h2, want, fst) = (app.handle().clone(), app.state::<HudWant>().0.clone(), app.state::<FpsStatus>().0.clone());
+            std::thread::spawn(move || stats_loop(h2, want, fst));
             Ok(())
         })
         // Alt+F4 (or any close request) must not quit the main island; Settings > Quit exits instead. Site windows close normally.

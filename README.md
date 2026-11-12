@@ -16,3 +16,11 @@ Chat overlay needs Windows notification access: not built yet. Sites, Notificati
 `npm run tauri build` -> `src-tauri/target/release/bundle/nsis/Notch_0.1.0_x64-setup.exe`
 Copy that one file to any Windows 10/11 x64 PC and run it. No Rust or Node needed there.
 It installs per-user (no admin prompt) and sets up WebView2 if the PC doesn't have it (needs internet).
+
+## FPS counter (third-party component)
+The gaming bar's FPS uses Intel's PresentMon console app (MIT licence, see `src-tauri/resources/PresentMon-LICENSE.txt`),
+bundled unmodified as `src-tauri/resources/PresentMon.exe` (v2.6.0, SHA-256 b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af,
+from https://github.com/GameTechDev/PresentMon/releases/tag/v2.6.0).
+It reads Windows' graphics event trace, which needs permission: Settings > "Set up access" adds your account to the
+"Performance Log Users" group (one admin prompt, then sign out and in), or run Notch as administrator.
+Security software may flag the tool; it is only started while a fullscreen game is in front and the gaming bar is on.

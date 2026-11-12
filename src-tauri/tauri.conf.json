@@ -46,6 +46,10 @@
         "installMode": "currentUser",
         "displayLanguageSelector": false
       }
-    }
+    },
+    "resources": [
+      "resources/PresentMon.exe",
+      "resources/PresentMon-LICENSE.txt"
+    ]
   }
 }

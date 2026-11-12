@@ -18,6 +18,12 @@ const Slider = ({ v, min, max, set, label }: { v: number; min: number; max: numb
     <span className="mp">{v}%</span>
   </div>
 );
+const FPS_TEXT: Record<string, string> = {
+  ok: "Working. FPS shows in the gaming bar while a game is the active window.",
+  idle: "Ready. FPS appears in the gaming bar once a game is running. If it never does, set up access below.",
+  denied: "Windows is blocking the FPS reader. Set up access (asks for administrator once), then sign out and back in.",
+  missing: "This build doesn't include the FPS reader (PresentMon), so FPS is unavailable.",
+};
 const Toggle = ({ on, set, label }: { on: boolean; set: () => void; label: string }) => (
   <button role="switch" aria-checked={on} aria-label={label} className={"tg" + (on ? " on" : "")} onClick={set}><i /></button>
 );
@@ -26,6 +32,11 @@ export function Settings({ cfg, set, enabled, setEnabled, onTestPeek }: { cfg: C
   const up = <K extends keyof Cfg>(k: K) => (v: Cfg[K]) => set({ ...cfg, [k]: v });
   const [auto, setAuto] = useState(false);
   const [sure, setSure] = useState(false);
+  const [fps, setFps] = useState("idle");
+  useEffect(() => {
+    const p = () => invoke<string>("fps_status").then(setFps).catch(() => {});
+    p(); const i = setInterval(p, 2000); return () => clearInterval(i);
+  }, []);
   useEffect(() => { isEnabled().then(setAuto).catch(() => {}); }, []);
   const toggleAuto = async () => { try { if (auto) await disable(); else await enable(); setAuto(!auto); } catch {} };
   return (
@@ -78,6 +89,9 @@ export function Settings({ cfg, set, enabled, setEnabled, onTestPeek }: { cfg: C
       </Row>
       <Row title="Gaming bar" desc="A stats strip (CPU, GPU, RAM, network, clock) while a game is fullscreen. Hovering never opens the island then; use the arrow at the bar's right end.">
         <Seg v={cfg.hud} set={up("hud")} opts={[["auto", "Auto"], ["always", "Always"], ["off", "Off"]]} />
+      </Row>
+      <Row title="FPS counter" desc={FPS_TEXT[fps] ?? FPS_TEXT.idle}>
+        {(fps === "denied" || fps === "idle") && <button className="pill2" onClick={() => invoke("enable_fps_access")}>Set up access (admin, once)</button>}
       </Row>
       <Row title="Gaming bar size" desc="Scales the stats strip, keeping its proportions.">
         <Slider v={cfg.sizeHud} min={40} max={105} set={up("sizeHud")} label="Gaming bar size" />

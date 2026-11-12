@@ -181,7 +181,7 @@ export default function App() {
   const t = useRef<number>();
   const tabT = useRef<number>();
   const seen = useRef(new Set<number>()), t0 = useRef(Date.now() - 2000);
-  const nots = useNotifs(cfg.peek === "on", 3000);
+  const nots = useNotifs(cfg.peek === "on" && !disabled, 3000);
 
   const hud = !disabled && (cfg.hud === "always" || (cfg.hud === "auto" && gaming));
   hudRef.current = hud; // while the gaming bar shows, hovering must not open the island
@@ -225,8 +225,8 @@ export default function App() {
   useEffect(() => { if (open) setPeek(null); }, [open]);
   useEffect(() => {
     const poll = () => invoke<Media>("get_media").then((x) => { setM(x); setAt(Date.now()); }).catch(() => {});
-    poll(); const i = setInterval(poll, open ? 1000 : 2500); return () => clearInterval(i);
-  }, [open]);
+    poll(); const i = setInterval(poll, open ? 1000 : disabled || hud ? 8000 : m.active ? 2500 : 5000); return () => clearInterval(i);
+  }, [open, disabled, hud, m.active]);
   useEffect(() => {
     if (!m.title) { setArt(""); setCol(""); return; }
     invoke<string>("get_art").then((a) => { setArt(a); if (a) avgColor(a).then(setCol); else setCol(""); }).catch(() => {});
