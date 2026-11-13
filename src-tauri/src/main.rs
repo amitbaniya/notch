@@ -987,6 +987,27 @@ async fn get_icon(kind: String, arg: String) -> String {
 
 // ---- shortcut feedback: tell the UI when volume, mute or brightness changed ----
 struct OsdWant(Arc<AtomicBool>);
+
+#[cfg(windows)]
+static LCD_OK: AtomicBool = AtomicBool::new(false);
+
+#[cfg(windows)]
+fn open_lcd() -> Option<windows::Win32::Foundation::HANDLE> {
+    use windows::core::w;
+    use windows::Win32::{Foundation::HANDLE, Storage::FileSystem::{CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING}};
+    unsafe { CreateFileW(w!("\\\\.\\LCD"), 0xC000_0000, FILE_SHARE_READ | FILE_SHARE_WRITE, None, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, HANDLE::default()).ok() }
+}
+
+// IOCTL_VIDEO_QUERY_DISPLAY_BRIGHTNESS -> (brightness on AC, brightness on battery)
+#[cfg(windows)]
+fn query_brightness(h: windows::Win32::Foundation::HANDLE) -> Option<(u8, u8)> {
+    use windows::Win32::System::IO::DeviceIoControl;
+    let mut out = [0u8; 3];
+    let mut n = 0u32;
+    unsafe { DeviceIoControl(h, 0x0023_0498, None, 0, Some(out.as_mut_ptr() as *mut std::ffi::c_void), 3, Some(&mut n), None).ok()?; }
+    if n < 3 { return None; }
+    Some((out[1], out[2]))
+}
 #[tauri::command]
 fn set_osd_want(s: State<OsdWant>, v: bool) { s.0.store(v, Ordering::Relaxed); }
 
@@ -1001,6 +1022,9 @@ fn osd_loop(app: tauri::AppHandle, want: Arc<AtomicBool>) {
         let (mut out, mut inp) = (None, None);
         let mut refreshed: Option<std::time::Instant> = None;
         let mut last: Option<(f32, bool, bool)> = None;
+        let lcd = open_lcd(); // laptop panel: brightness can be read directly and instantly
+        if lcd.is_some() { LCD_OK.store(true, Ordering::Relaxed); }
+        let mut last_b: Option<(u8, u8)> = None;
         loop {
             if !want.load(Ordering::Relaxed) { last = None; std::thread::sleep(Duration::from_millis(800)); continue; }
             if refreshed.map_or(true, |t| t.elapsed() > Duration::from_secs(10)) { // also picks up a changed default device
@@ -1015,6 +1039,15 @@ fn osd_loop(app: tauri::AppHandle, want: Arc<AtomicBool>) {
                 if m != lm { let _ = app.emit("osd", OsdEvt { kind: "volume", value: v * 100.0, muted: m, what: "mute" }); }
                 else if (v - lv).abs() > 0.004 { let _ = app.emit("osd", OsdEvt { kind: "volume", value: v * 100.0, muted: m, what: "level" }); }
                 if mm != lmm { let _ = app.emit("osd", OsdEvt { kind: "mic", value: 0.0, muted: mm, what: "mute" }); }
+            }
+            if let Some(h) = lcd {
+                if let Some((ac, dc)) = query_brightness(h) {
+                    if let Some((lac, ldc)) = last_b {
+                        if ac != lac { let _ = app.emit("osd", OsdEvt { kind: "brightness", value: ac as f32, muted: false, what: "level" }); }
+                        else if dc != ldc { let _ = app.emit("osd", OsdEvt { kind: "brightness", value: dc as f32, muted: false, what: "level" }); }
+                    }
+                    last_b = Some((ac, dc));
+                }
             }
             last = Some((v, m, mm));
             std::thread::sleep(Duration::from_millis(150));
@@ -1031,7 +1064,7 @@ fn start_brightness_watch(app: tauri::AppHandle) {
     #[cfg(windows)]
     {
         static STARTED: AtomicBool = AtomicBool::new(false);
-        if STARTED.swap(true, Ordering::Relaxed) { return; }
+        if STARTED.swap(true, Ordering::Relaxed) || LCD_OK.load(Ordering::Relaxed) { return; } // the direct reader is enough
         std::thread::spawn(move || {
             use std::io::BufRead;
             use std::os::windows::process::CommandExt;
