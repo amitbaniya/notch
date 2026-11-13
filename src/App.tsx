@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { ClipView, useClipHistory, Clip } from "./Clip";
 import { Shelf } from "./Shelf";
 import { AudioTab, useAudio, useLive } from "./Audio";
-import { refreshBr } from "./cache";
+import { refreshBr, brCache } from "./cache";
 import { Controls } from "./Controls";
 import { Progress, Bar } from "./Progress";
 import { Settings } from "./Settings";
@@ -17,8 +17,12 @@ import type { Cfg } from "./types";
 
 type Media = { title: string; artist: string; playing: boolean; active: boolean; pos: number; dur: number };
 type Stats = { cpu: number; ram: number; net: number; gpu: number | null; gpu_t: number | null; fps: number | null };
+type Osd = { kind: "volume" | "brightness" | "mic"; value: number; muted: boolean; dir: "up" | "down" | "none" };
 type Tab = "music" | "sites" | "notify" | "shelf" | "clip" | "controls" | "tools" | "audio" | "settings";
 
+const osdIcon = (o: Osd): IconName => o.kind === "mic" ? (o.muted ? "micOff" : "mic")
+  : o.kind === "volume" ? (o.muted ? "volumeOff" : o.dir === "up" ? "volumeUp" : o.dir === "down" ? "volumeDown" : "volume")
+  : o.dir === "up" ? "sunUp" : o.dir === "down" ? "sunDown" : "sun";
 const SPRING = { type: "spring", stiffness: 320, damping: 30, mass: 0.9 } as const;
 const TABS: [Tab, IconName][] = [["music", "music"], ["sites", "globe"], ["notify", "bell"], ["shelf", "folder"], ["clip", "clip"], ["controls", "sliders"], ["tools", "grid"], ["audio", "headphones"], ["settings", "gear"]];
 
@@ -169,7 +173,7 @@ export default function App() {
   const disRef = useRef(disabled); disRef.current = disabled;
   const hudRef = useRef(false);
   const [tab, setTab] = useState<Tab>("music");
-  const [cfg, setCfg] = useState<Cfg>(() => { const sv = load<any>("cfg", {}); return { style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, hud: "auto", peek: "on", tabHover: "on", ...sv, sizeNotch: sv.sizeNotch ?? sv.size ?? 80, sizeOpen: sv.sizeOpen ?? sv.size ?? 85, sizeHud: sv.sizeHud ?? 80, sizePeek: sv.sizePeek ?? 100 }; });
+  const [cfg, setCfg] = useState<Cfg>(() => { const sv = load<any>("cfg", {}); return { style: "pill", surface: "peach", bar: "wave", viz: "bars", bg: "album", see: 42, hud: "auto", peek: "on", tabHover: "on", osd: "on", ...sv, sizeNotch: sv.sizeNotch ?? sv.size ?? 80, sizeOpen: sv.sizeOpen ?? sv.size ?? 85, sizeHud: sv.sizeHud ?? 80, sizePeek: sv.sizePeek ?? 100 }; });
   const [m, setM] = useState<Media>({ title: "", artist: "", playing: false, active: false, pos: 0, dur: 0 });
   const [at, setAt] = useState(Date.now());
   const [art, setArt] = useState(""); const [col, setCol] = useState("");
@@ -180,15 +184,20 @@ export default function App() {
   const [gaming, setGaming] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [peek, setPeek] = useState<Notif | null>(null);
+  const [osd, setOsd] = useState<Osd | null>(null);
+  const [brOk, setBrOk] = useState(brCache.v >= 0);
+  const osdT = useRef<number>(), lastV = useRef<Record<string, number>>({});
+  const osdOn = useRef(false), openRef = useRef(false);
   const t = useRef<number>();
   const tabT = useRef<number>();
   const seen = useRef(new Set<number>()), t0 = useRef(Date.now() - 2000);
   const nots = useNotifs(cfg.peek === "on" && !disabled, 3000);
 
   const hud = !disabled && (cfg.hud === "always" || (cfg.hud === "auto" && gaming));
+  osdOn.current = cfg.osd === "on" && !disabled; openRef.current = open;
   hudRef.current = hud; // while the gaming bar shows, hovering must not open the island
   const float = cfg.style !== "pill", dot = cfg.style === "dot", full = cfg.style === "full";
-  const mode = disabled ? "off" : open ? "open" : peek ? "peek" : hud ? "hud" : "idle";
+  const mode = disabled ? "off" : open ? "open" : osd ? "osd" : peek ? "peek" : hud ? "hud" : "idle";
 
   useEffect(() => {
     save("cfg", cfg);
@@ -211,7 +220,23 @@ export default function App() {
     if (disabled) { cw = 76; ch = 9; } else if (hud) { cw = 34; ch = 32; ox = 313; sc = cfg.sizeHud / 100; }
     invoke("set_expanded", { v: open, cw: Math.round(cw * sc), ch: Math.round(ch * sc), ox: Math.round(ox * sc), top: Math.round((float ? 10 : 0) * so), s: so });
   }, [open, hud, dot, full, float, disabled, cfg.sizeNotch, cfg.sizeOpen, cfg.sizeHud]);
-  useEffect(() => { refreshBr().catch(() => {}); }, []); // warm the brightness cache so Controls opens instantly
+  useEffect(() => { refreshBr().then((v) => setBrOk(v >= 0)).catch(() => {}); }, []);
+  useEffect(() => { // shortcut feedback: Rust reports volume / mute / brightness changes
+    const un = listen<{ kind: Osd["kind"]; value: number; muted: boolean; what: string }>("osd", (e) => {
+      const p = e.payload, prev = lastV.current[p.kind];
+      lastV.current[p.kind] = p.value;
+      if (!osdOn.current || openRef.current) return;
+      const dir = p.what === "mute" || prev === undefined ? "none" : p.value > prev ? "up" : "down";
+      setOsd({ kind: p.kind, value: p.value, muted: p.muted, dir });
+      clearTimeout(osdT.current); osdT.current = window.setTimeout(() => setOsd(null), 1500);
+    });
+    return () => { un.then((f) => f()); };
+  }, []);
+  useEffect(() => {
+    const on = cfg.osd === "on" && !disabled;
+    invoke("set_osd_want", { v: on });
+    if (on && brOk) invoke("start_brightness_watch");
+  }, [cfg.osd, disabled, brOk]); // warm the brightness cache so Controls opens instantly
   useEffect(() => save("disabled", disabled), [disabled]);
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   useEffect(() => { // global shortcut (Ctrl+Alt+N) from Rust
@@ -224,7 +249,7 @@ export default function App() {
     if (fresh.length && !open) setPeek(fresh[0]);
   }, [nots]);
   useEffect(() => { if (!peek) return; const x = setTimeout(() => setPeek(null), 2000); return () => clearTimeout(x); }, [peek]);
-  useEffect(() => { if (open) setPeek(null); }, [open]);
+  useEffect(() => { if (open) { setPeek(null); setOsd(null); } }, [open]);
   useEffect(() => {
     const poll = () => invoke<Media>("get_media").then((x) => { setM(x); setAt(Date.now()); }).catch(() => {});
     poll(); const i = setInterval(poll, open ? 1000 : disabled || hud ? 8000 : m.active ? 2500 : 5000); return () => clearInterval(i);
@@ -270,12 +295,12 @@ export default function App() {
   else if (tab === "sites") body = <Sites />;
   else body = <Notifications />;
 
-  const W = { open: 640, peek: 440, hud: 660, off: 76, idle: dot ? 34 : full ? 300 : 230 }[mode];
-  const H = { open: 270, peek: 64, hud: 30, off: 8, idle: full ? 44 : 34 }[mode];
+  const W = { open: 640, peek: 440, hud: 660, off: 76, osd: dot ? 44 : 270, idle: dot ? 34 : full ? 300 : 230 }[mode];
+  const H = { open: 270, peek: 64, hud: 30, off: 8, osd: dot ? 44 : 44, idle: full ? 44 : 34 }[mode];
   const flush = !float || mode === "hud" || mode === "off";
   const mt = flush ? 0 : mode === "open" ? 10 : mode === "idle" && dot ? 6 : 8;
-  const rt = flush ? 0 : mode === "open" ? 34 : mode === "peek" ? 28 : dot ? 17 : 22;
-  const rb = mode === "off" ? 4 : mode === "open" ? 34 : mode === "peek" ? 28 : mode === "hud" ? 12 : dot ? 17 : full ? 22 : 18;
+  const rt = flush ? 0 : mode === "open" ? 34 : mode === "peek" ? 28 : mode === "osd" ? 22 : dot ? 17 : 22;
+  const rb = mode === "off" ? 4 : mode === "open" ? 34 : mode === "osd" ? (dot || full ? 22 : 20) : mode === "peek" ? 28 : mode === "hud" ? 12 : dot ? 17 : full ? 22 : 18;
   const fade = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0, transition: { duration: 0.1 } } };
 
   return (
@@ -294,6 +319,15 @@ export default function App() {
         )}
         {mode === "off" && <motion.div key="off" className="handle" title="Click to show Notch" onClick={() => setDisabled(false)} {...fade} />}
         {mode === "hud" && <motion.div key="hud" className="collapsed hudw" {...fade}><Hud s={stats} onOpen={() => setOpen(true)} /></motion.div>}
+        {mode === "osd" && osd && (
+          <motion.div key="osd" className={"osd" + (dot ? " dot" : "")} {...fade}>
+            <span className="osdi"><I n={osdIcon(osd)} s={dot ? 20 : 22} /></span>
+            {!dot && (osd.kind === "mic"
+              ? <span className="osdt">{osd.muted ? "Microphone muted" : "Microphone on"}</span>
+              : <><div className="osdbar"><i style={{ width: `${osd.kind === "volume" && osd.muted ? 0 : osd.value}%` }} /></div>
+                <span className="osdv">{osd.kind === "volume" && osd.muted ? "Muted" : Math.round(osd.value)}</span></>)}
+          </motion.div>
+        )}
         {mode === "peek" && peek && (
           <motion.div key="peek" className="pk" {...fade}>
             <AppIcon cacheKey={"a:" + peek.app} kind="aumid" arg={peek.app} label={peek.title || "?"} size={36} />

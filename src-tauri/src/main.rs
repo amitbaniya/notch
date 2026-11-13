@@ -985,6 +985,74 @@ async fn get_icon(kind: String, arg: String) -> String {
     { let _ = (kind, arg); String::new() }
 }
 
+// ---- shortcut feedback: tell the UI when volume, mute or brightness changed ----
+struct OsdWant(Arc<AtomicBool>);
+#[tauri::command]
+fn set_osd_want(s: State<OsdWant>, v: bool) { s.0.store(v, Ordering::Relaxed); }
+
+#[derive(Serialize, Clone)]
+struct OsdEvt { kind: &'static str, value: f32, muted: bool, what: &'static str }
+
+// Reads the speaker volume / mute and the microphone mute 6-7 times a second (cheap) while enabled.
+fn osd_loop(app: tauri::AppHandle, want: Arc<AtomicBool>) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Media::Audio::{eCapture, eRender};
+        let (mut out, mut inp) = (None, None);
+        let mut refreshed: Option<std::time::Instant> = None;
+        let mut last: Option<(f32, bool, bool)> = None;
+        loop {
+            if !want.load(Ordering::Relaxed) { last = None; std::thread::sleep(Duration::from_millis(800)); continue; }
+            if refreshed.map_or(true, |t| t.elapsed() > Duration::from_secs(10)) { // also picks up a changed default device
+                out = audio::vol(eRender).ok();
+                inp = audio::vol(eCapture).ok();
+                refreshed = Some(std::time::Instant::now());
+            }
+            let v = out.as_ref().and_then(|e| unsafe { e.GetMasterVolumeLevelScalar() }.ok()).unwrap_or(0.0);
+            let m = out.as_ref().and_then(|e| unsafe { e.GetMute() }.ok()).map(|b| b.as_bool()).unwrap_or(false);
+            let mm = inp.as_ref().and_then(|e| unsafe { e.GetMute() }.ok()).map(|b| b.as_bool()).unwrap_or(false);
+            if let Some((lv, lm, lmm)) = last {
+                if m != lm { let _ = app.emit("osd", OsdEvt { kind: "volume", value: v * 100.0, muted: m, what: "mute" }); }
+                else if (v - lv).abs() > 0.004 { let _ = app.emit("osd", OsdEvt { kind: "volume", value: v * 100.0, muted: m, what: "level" }); }
+                if mm != lmm { let _ = app.emit("osd", OsdEvt { kind: "mic", value: 0.0, muted: mm, what: "mute" }); }
+            }
+            last = Some((v, m, mm));
+            std::thread::sleep(Duration::from_millis(150));
+        }
+    }
+    #[cfg(not(windows))]
+    { let _ = (app, want); }
+}
+
+// Brightness: Windows raises a WMI event when it changes. One PowerShell process listens for it (laptops only,
+// started on demand) and exits by itself when Notch closes.
+#[tauri::command]
+fn start_brightness_watch(app: tauri::AppHandle) {
+    #[cfg(windows)]
+    {
+        static STARTED: AtomicBool = AtomicBool::new(false);
+        if STARTED.swap(true, Ordering::Relaxed) { return; }
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            use std::os::windows::process::CommandExt;
+            use std::process::{Command, Stdio};
+            let script = format!("$p=[System.Diagnostics.Process]::GetProcessById({}); Register-WmiEvent -Namespace root/wmi -Class WmiMonitorBrightnessEvent -Action {{ [Console]::Out.WriteLine('B:' + $Event.SourceEventArgs.NewEvent.Brightness); [Console]::Out.Flush() }} | Out-Null; while (-not $p.HasExited) {{ Start-Sleep -Seconds 5 }}", std::process::id());
+            let Ok(mut c) = Command::new("powershell").args(["-NoProfile", "-NonInteractive", "-Command", &script])
+                .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).creation_flags(0x08000000).spawn() else { return };
+            if let Some(out) = c.stdout.take() {
+                for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+                    if let Some(v) = line.strip_prefix("B:") {
+                        if let Ok(b) = v.trim().parse::<f32>() { let _ = app.emit("osd", OsdEvt { kind: "brightness", value: b, muted: false, what: "level" }); }
+                    }
+                }
+            }
+            let _ = c.wait();
+        });
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -996,7 +1064,8 @@ fn main() {
         .manage(Arc::new(Share::default()))
         .manage(HudWant(Arc::new(AtomicBool::new(false))))
         .manage(FpsStatus(Arc::new(Mutex::new(String::from("idle")))))
-        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, get_sessions, set_app_volume, set_app_mute, set_hud_want, quit_app, clip_seq, fps_status, enable_fps_access, fps_access, get_icon])
+        .manage(OsdWant(Arc::new(AtomicBool::new(false))))
+        .invoke_handler(tauri::generate_handler![set_expanded, get_media, get_art, media_control, open_uri, get_clip_files, start_share, stop_share, get_audio, set_out_vol, set_mute, test_sound, get_radios, set_radio, get_brightness, set_brightness, get_power, set_power, open_site, get_notifications, get_sessions, set_app_volume, set_app_mute, set_hud_want, quit_app, clip_seq, fps_status, enable_fps_access, fps_access, get_icon, set_osd_want, start_brightness_watch])
         .setup(|app| {
             let win = app.get_webview_window("main").unwrap();
             if let Ok(Some(mon)) = win.primary_monitor() {
@@ -1036,6 +1105,8 @@ fn main() {
             });
             let (h2, want, fst) = (app.handle().clone(), app.state::<HudWant>().0.clone(), app.state::<FpsStatus>().0.clone());
             std::thread::spawn(move || stats_loop(h2, want, fst));
+            let (h3, ow) = (app.handle().clone(), app.state::<OsdWant>().0.clone());
+            std::thread::spawn(move || osd_loop(h3, ow));
             Ok(())
         })
         // Alt+F4 (or any close request) must not quit the main island; Settings > Quit exits instead. Site windows close normally.

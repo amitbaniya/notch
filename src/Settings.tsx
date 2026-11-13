@@ -86,6 +86,9 @@ export function Settings({ cfg, set, enabled, setEnabled, onTestPeek }: { cfg: C
       <Row title="Notification peek" desc="New notifications slide out for 2 seconds, without you hovering.">
         <Seg v={cfg.peek} set={up("peek")} opts={[["on", "On"], ["off", "Off"]]} />
       </Row>
+      <Row title="Shortcut feedback" desc="Volume, mute and brightness changes from keyboard shortcuts show on the island: a slider on the notch and island, just an icon on the hole punch.">
+        <Seg v={cfg.osd} set={up("osd")} opts={[["on", "On"], ["off", "Off"]]} />
+      </Row>
       <Row title="Notification size" desc="Scales the notification that slides out. Press Test to preview it.">
         <Slider v={cfg.sizePeek} min={60} max={150} set={up("sizePeek")} label="Notification size" />
         <button className="pill2" style={{ marginTop: 8 }} onClick={onTestPeek}>Test</button>

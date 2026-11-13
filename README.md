@@ -30,3 +30,6 @@ The QR code opens a page on your PC (same Wi-Fi only, random link). Phones can d
 
 ## App icons
 The sound mixer and notifications show each app's real icon, read from Windows (Store apps via their package logo, others via their executable or App Paths entry). If an icon can't be found, a coloured initial is shown. Icons are cached in memory and localStorage.
+
+## Shortcut feedback
+Volume up/down/mute, microphone mute and (on laptops) brightness changes made with keyboard shortcuts show on the island: a slider on the Notch and Island styles, just an icon (volume plus, sun minus, ...) on the Hole punch. Turn it off in Settings > Shortcut feedback.
