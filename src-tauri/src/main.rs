@@ -1088,6 +1088,8 @@ fn start_brightness_watch(app: tauri::AppHandle) {
 
 fn main() {
     tauri::Builder::default()
+        // Must be first: a second launch (e.g. startup + manual start) quits at once and just un-hides the running island.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| { let _ = app.emit("show-notch", ()); }))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().with_handler(|app, _shortcut, event| {
             if event.state() == ShortcutState::Pressed { let _ = app.emit("toggle-notch", ()); }

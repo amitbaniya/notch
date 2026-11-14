@@ -239,6 +239,10 @@ export default function App() {
   }, [cfg.osd, disabled, brOk]); // warm the brightness cache so Controls opens instantly
   useEffect(() => save("disabled", disabled), [disabled]);
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
+  useEffect(() => { // launched a second time: bring the existing island back if it was hidden
+    const un = listen("show-notch", () => setDisabled(false));
+    return () => { un.then((f) => f()); };
+  }, []);
   useEffect(() => { // global shortcut (Ctrl+Alt+N) from Rust
     const un = listen("toggle-notch", () => setDisabled((d) => !d));
     return () => { un.then((f) => f()); };
