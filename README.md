@@ -10,6 +10,10 @@
   [![Release](https://img.shields.io/github/v/release/amitbaniya/notch?include_prereleases&cacheSeconds=0)](https://github.com/amitbaniya/notch/releases)
   [![License](https://img.shields.io/github/license/amitbaniya/notch?cacheSeconds=0)](https://github.com/amitbaniya/notch/blob/main/LICENSE)
   [![Tauri](https://img.shields.io/badge/Tauri-2.0-orange)](https://tauri.app)
+  <br>
+  <a href="https://buymeacoffee.com/amitbaniya" target="_blank">
+    <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee">
+  </a>
 </div>
 
 ---
@@ -162,8 +166,4 @@ MIT License — see [LICENSE](https://github.com/amitbaniya/notch/blob/main/LICE
   Made with ❤️ by <a href="https://github.com/amitbaniya">amitbaniya</a>
   <br>
   <sub>Inspired by <a href="https://github.com/NotchPixel/NotchPixel">NotchPixel</a> — Dynamic Island for Windows</sub>
-  <br><br>
-  <a href="https://buymeacoffee.com/amitbaniya" target="_blank">
-    <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee">
-  </a>
 </div>
