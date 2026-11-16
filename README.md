@@ -160,4 +160,6 @@ MIT License — see [LICENSE](https://github.com/amitbaniya/notch/blob/main/LICE
 
 <div align="center">
   Made with ❤️ by <a href="https://github.com/amitbaniya">amitbaniya</a>
+  <br>
+  <sub>Inspired by <a href="https://github.com/NotchPixel/NotchPixel">NotchPixel</a> — Dynamic Island for Windows</sub>
 </div>
