@@ -14,12 +14,6 @@
   <a href="https://buymeacoffee.com/amitbaniya" target="_blank">
     <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217" height="60">
   </a>
-  <br><br>
-  <a href="https://buymeacoffee.com/amitbaniya" target="_blank">
-    <img src="src-tauri/icons/qr-code.png" alt="Buy Me a Coffee QR Code" width="180" height="180">
-  </a>
-  <br>
-  <sub>Scan to support on mobile</sub>
 </div>
 
 ---
@@ -172,4 +166,10 @@ MIT License — see [LICENSE](https://github.com/amitbaniya/notch/blob/main/LICE
   Made with ❤️ by <a href="https://github.com/amitbaniya">amitbaniya</a>
   <br>
   <sub>Inspired by <a href="https://github.com/NotchPixel/NotchPixel">NotchPixel</a> — Dynamic Island for Windows</sub>
+  <br><br>
+  <a href="https://buymeacoffee.com/amitbaniya" target="_blank">
+    <img src="src-tauri/icons/qr-code.png" alt="Buy Me a Coffee QR Code" width="160" height="160">
+  </a>
+  <br>
+  <sub>Scan to support on mobile</sub>
 </div>
