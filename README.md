@@ -1,35 +1,163 @@
-# Notch (phase 4)
-Dynamic Island-style notch for Windows 10/11. Tauri 2 + React + TypeScript + Motion.
+# Notch
 
-Setup: install Rust, Node 18+ and WebView2. Then `npm install` and `npm run tauri dev` (`npm run tauri build` for an installer).
+<div align="center">
+  <img src="src-tauri/icons/icon.png" alt="Notch Logo" width="128" height="128">
+  
+  **Dynamic Island-style notch for Windows 10/11**
+  
+  Built with Tauri 2 · React · TypeScript · Motion
+  
+  [![Release](https://img.shields.io/github/v/release/amitbaniya/notch)](https://github.com/amitbaniya/notch/releases)
+  [![License](https://img.shields.io/github/license/amitbaniya/notch)](LICENSE)
+  [![Tauri](https://img.shields.io/badge/Tauri-2.0-orange)](https://tauri.app)
+</div>
 
-Hover the top-centre of the screen to open.
-Tabs: Music, Sites, Notifications, Shelf, Clipboard, Controls, Tools, Audio (per-app mixer), Settings. Notification size slider with a Test button. Hover a tab icon to switch tabs (can be turned off). Alt+F4 is blocked; quit from Settings. Ctrl+Alt+N hides Notch (a small handle stays at the top; click it to bring it back). Gaming bar (own size slider; opened with the arrow at its right end, never by hover) while a game is fullscreen; notification peek; glass look with transparency and separate Notch size and Open size sliders; Settings has an open-at-startup switch.
-Phase 4 adds: Sites (own windows, stay signed in), Notifications and Chat overlay (read from the Windows toast database; WhatsApp, Instagram, Messenger, Telegram, Discord).
-Settings > Appearance: Shape (Island / Notch / Hole punch), Surface themes, Progress bar styles, Visualizer, Background.
-Phase 3 adds: Call (mic mute with live level, speaker volume + test, camera check) and Controls (brightness, volume, Wi-Fi, Bluetooth, mute, power plan; Night light and Focus open Windows Settings).
-Phase 2 adds: Clipboard cards (text, links, images, files, snippets), Shelf (drag files in, Send to phone via QR), and a Notch / Full pill / Hole punch collapsed style in Settings.
-Working tabs: Music (art, seek, colour glow), Clipboard (in-memory text), Widgets (clock, tasks, weather, battery), Tools (Snip, Record, 6 shortcut slots), Settings.
-Chat overlay needs Windows notification access: not built yet. Sites, Notifications, Shelf, Controls and Call come in later phases.
+---
 
-## Making an installer
-`npm run tauri build` -> `src-tauri/target/release/bundle/nsis/Notch_0.1.0_x64-setup.exe`
-Copy that one file to any Windows 10/11 x64 PC and run it. No Rust or Node needed there.
-It installs per-user (no admin prompt) and sets up WebView2 if the PC doesn't have it (needs internet).
+## Preview
 
-## FPS counter (third-party component)
-The gaming bar's FPS uses Intel's PresentMon console app (MIT licence, see `src-tauri/resources/PresentMon-LICENSE.txt`),
-bundled unmodified as `src-tauri/resources/PresentMon.exe` (v2.6.0, SHA-256 b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af,
-from https://github.com/GameTechDev/PresentMon/releases/tag/v2.6.0).
-It reads Windows' graphics event trace, which needs permission: Settings > "Set up access" adds your account to the
-"Performance Log Users" group (one admin prompt, then sign out and in), or run Notch as administrator.
-Security software may flag the tool; it is only started while a fullscreen game is in front and the gaming bar is on.
+<div align="center">
+  <!-- Replace with actual screenshot/GIF when available -->
+  <img src="https://via.placeholder.com/800x400/1a1a2e/ffffff?text=Notch+Preview+Screenshot+or+GIF+Here" alt="Notch Preview" width="800">
+  <p><em>Add a screenshot or GIF of Notch in action here</em></p>
+</div>
 
-## Send to phone
-The QR code opens a page on your PC (same Wi-Fi only, random link). Phones can download shelf files (with image previews, sizes, Download all) and send files back; those are saved in Downloads\Notch and added to the shelf.
+---
 
-## App icons
-The sound mixer and notifications show each app's real icon, read from Windows (Store apps via their package logo, others via their executable or App Paths entry). If an icon can't be found, a coloured initial is shown. Icons are cached in memory and localStorage.
+## Features
 
-## Shortcut feedback
-Volume up/down/mute, microphone mute and (on laptops) brightness changes made with keyboard shortcuts show on the island: a slider on the Notch and Island styles, just an icon (volume plus, sun minus, ...) on the Hole punch. Turn it off in Settings > Shortcut feedback.
+| Feature | Description |
+|---------|-------------|
+| **Dynamic Island** | Hover top-center to expand, auto-collapses |
+| **Music** | Album art, seek bar, color glow from artwork |
+| **Sites** | Pinned web apps in own windows, stay signed in |
+| **Notifications** | Read from Windows toast database (WhatsApp, Discord, Telegram, etc.) |
+| **Clipboard** | History with text, links, images, files, snippets |
+| **Shelf** | Drag & drop files, send to phone via QR code |
+| **Controls** | Brightness, volume, Wi-Fi, Bluetooth, power plan |
+| **Call** | Mic mute with live level, speaker volume, camera check |
+| **Audio Mixer** | Per-app volume with real app icons |
+| **Gaming Bar** | FPS counter (via PresentMon), appears in fullscreen games |
+| **Settings** | Shape (Island/Notch/Hole punch), themes, startup, visualizers |
+
+---
+
+## Installation
+
+### For Users (Recommended)
+
+Download the latest installer from the [Releases page](https://github.com/amitbaniya/notch/releases):
+
+1. Download `Notch_<version>_x64-setup.exe`
+2. Run the installer (per-user, no admin required)
+3. WebView2 will be installed automatically if needed (requires internet)
+4. Launch Notch from Start Menu
+
+### For Developers
+
+#### Prerequisites
+- **Rust** (latest stable) — [Install Rust](https://rustup.rs)
+- **Node.js 18+** — [Download Node](https://nodejs.org)
+- **WebView2 Runtime** — [Download WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (or let the installer handle it)
+
+#### Setup
+```bash
+# Clone the repository
+git clone https://github.com/amitbaniya/notch.git
+cd notch
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run tauri dev
+
+# Build installer
+npm run tauri build
+# Output: src-tauri/target/release/bundle/nsis/Notch_<version>_x64-setup.exe
+```
+
+#### Development Commands
+```bash
+npm run dev          # Vite dev server only
+npm run build        # TypeScript + Vite production build
+npm run tauri dev    # Full Tauri dev (Rust + Vite)
+npm run tauri build  # Full Tauri build (creates installer)
+```
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Hover top-center` | Open/expand Notch |
+| `Ctrl + Alt + N` | Hide Notch (shows handle) |
+| `Click handle` | Restore Notch |
+| `Alt + F4` | Blocked (quit from Settings) |
+| `Hover tab icon` | Switch tabs (configurable) |
+
+Volume/brightness/mute keys show feedback on the island (configurable in Settings).
+
+---
+
+## Configuration
+
+Settings are persisted and include:
+- **Appearance**: Shape (Island/Notch/Hole punch), surface themes, progress bar styles, visualizer
+- **Behavior**: Open at startup, hover-to-switch tabs, shortcut feedback
+- **Sizes**: Separate Notch size and Open size sliders
+- **Gaming**: FPS counter size, notification peek
+- **Notifications**: Test button, size slider
+
+---
+
+## Third-Party Components
+
+- **PresentMon** (Intel, MIT License) — FPS counter for gaming bar
+  - Bundled: `src-tauri/resources/PresentMon.exe` v2.6.0
+  - Source: [GameTechDev/PresentMon](https://github.com/GameTechDev/PresentMon)
+  - License: `src-tauri/resources/PresentMon-LICENSE.txt`
+  - Requires "Performance Log Users" group membership (one-time admin setup)
+
+---
+
+## Project Structure
+
+```
+notch/
+├── src/                    # React frontend
+│   ├── components/         # UI components (Tabs, Bubbles, etc.)
+│   ├── hooks/              # Custom React hooks
+│   ├── types.ts            # TypeScript types
+│   └── main.tsx            # Entry point
+├── src-tauri/              # Tauri/Rust backend
+│   ├── src/main.rs         # Rust entry point
+│   ├── resources/          # Bundled binaries (PresentMon)
+│   ├── icons/              # App icons
+│   └── tauri.conf.json     # Tauri configuration
+├── dist/                   # Built frontend (generated)
+└── package.json            # Node scripts & dependencies
+```
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+<div align="center">
+  Made with ❤️ by <a href="https://github.com/amitbaniya">amitbaniya</a>
+</div>
