@@ -7,8 +7,8 @@
   
   Built with Tauri 2 · React · TypeScript · Motion
   
-  [![Release](https://img.shields.io/github/v/release/amitbaniya/notch)](https://github.com/amitbaniya/notch/releases)
-  [![License](https://img.shields.io/github/license/amitbaniya/notch)](LICENSE)
+  [![Release](https://img.shields.io/github/v/release/amitbaniya/notch?include_prereleases)](https://github.com/amitbaniya/notch/releases)
+  [![License](https://img.shields.io/github/license/amitbaniya/notch)](https://github.com/amitbaniya/notch/blob/main/LICENSE)
   [![Tauri](https://img.shields.io/badge/Tauri-2.0-orange)](https://tauri.app)
 </div>
 
@@ -144,7 +144,7 @@ notch/
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](https://github.com/amitbaniya/notch/blob/main/LICENSE) for details.
 
 ---
 
