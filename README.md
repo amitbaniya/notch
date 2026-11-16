@@ -14,6 +14,12 @@
   <a href="https://buymeacoffee.com/amitbaniya" target="_blank">
     <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217" height="60">
   </a>
+  <br><br>
+  <a href="https://buymeacoffee.com/amitbaniya" target="_blank">
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https%3A%2F%2Fbuymeacoffee.com%2Famitbaniya" alt="Buy Me a Coffee QR Code" width="180" height="180">
+  </a>
+  <br>
+  <sub>Scan to support on mobile</sub>
 </div>
 
 ---
