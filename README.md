@@ -165,7 +165,7 @@ MIT License — see [LICENSE](https://github.com/amitbaniya/notch/blob/main/LICE
 <div align="center">
   Made with ❤️ by <a href="https://github.com/amitbaniya">amitbaniya</a>
   <br>
-  <sub>Inspired by <a href="https://github.com/NotchPixel/NotchPixel">NotchPixel</a> — Dynamic Island for Windows</sub>
+  <sub>Inspired by <a href="https://notchpixel.com/">NotchPixel</a> — Dynamic Island for Windows</sub>
   <br><br>
   <a href="https://buymeacoffee.com/amitbaniya" target="_blank">
     <img src="src-tauri/icons/qr-code.png" alt="Buy Me a Coffee QR Code" width="160" height="160">
