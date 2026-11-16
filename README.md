@@ -12,7 +12,7 @@
   [![Tauri](https://img.shields.io/badge/Tauri-2.0-orange)](https://tauri.app)
   <br>
   <a href="https://buymeacoffee.com/amitbaniya" target="_blank">
-    <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217" height="60">
   </a>
 </div>
 
