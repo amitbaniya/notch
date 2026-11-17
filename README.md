@@ -10,9 +10,9 @@
   [![Release](https://img.shields.io/github/v/release/amitbaniya/notch?include_prereleases&cacheSeconds=0)](https://github.com/amitbaniya/notch/releases)
   [![License](https://img.shields.io/github/license/amitbaniya/notch?cacheSeconds=0)](https://github.com/amitbaniya/notch/blob/main/LICENSE)
   [![Tauri](https://img.shields.io/badge/Tauri-2.0-orange)](https://tauri.app)
-  <br>
-  <a href="https://buymeacoffee.com/amitbaniya" target="_blank">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217" height="60">
+  <br><br>
+  <a href="https://buymemomo.com/amitbaniya" target="_blank">
+    <img src="https://img.shields.io/badge/Buy%20Me%20Momo-FF6B6B?style=for-the-badge&logo=heart&logoColor=white" alt="Buy Me Momo">
   </a>
 </div>
 
@@ -166,10 +166,4 @@ MIT License — see [LICENSE](https://github.com/amitbaniya/notch/blob/main/LICE
   Made with ❤️ by <a href="https://github.com/amitbaniya">amitbaniya</a>
   <br>
   <sub>Inspired by <a href="https://notchpixel.com/">NotchPixel</a> — Dynamic Island for Windows</sub>
-  <br><br>
-  <a href="https://buymeacoffee.com/amitbaniya" target="_blank">
-    <img src="src-tauri/icons/qr-code.png" alt="Buy Me a Coffee QR Code" width="160" height="160">
-  </a>
-  <br>
-  <sub>Scan to support on mobile</sub>
 </div>
