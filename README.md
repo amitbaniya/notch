@@ -12,7 +12,8 @@
   [![Tauri](https://img.shields.io/badge/Tauri-2.0-orange)](https://tauri.app)
   <br><br>
   <a href="https://buymemomo.com/amitbaniya" target="_blank">
-    <img src="https://img.shields.io/badge/Buy%20Me%20Momo-FF6B6B?style=for-the-badge&logo=heart&logoColor=white" alt="Buy Me Momo">
+    <img src="src-tauri/icons/momo.png" alt="Buy Me Momo" width="24" height="24" style="vertical-align:middle;margin-right:8px;">
+    <img src="https://img.shields.io/badge/Buy%20Me%20Momo-C25223?style=for-the-badge&logoColor=white" alt="Buy Me Momo">
   </a>
 </div>
 
