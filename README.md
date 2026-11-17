@@ -11,9 +11,9 @@
   [![License](https://img.shields.io/github/license/amitbaniya/notch?cacheSeconds=0)](https://github.com/amitbaniya/notch/blob/main/LICENSE)
   [![Tauri](https://img.shields.io/badge/Tauri-2.0-orange)](https://tauri.app)
   <br><br>
-  <a href="https://buymemomo.com/amitbaniya" target="_blank">
-    <img src="src-tauri/icons/momo_small.png" alt="Momo" width="28" height="28" style="vertical-align:middle;margin-right:8px;">
-    <img src="https://img.shields.io/badge/Buy%20Me%20Momo-C25223?style=for-the-badge&logoColor=white" alt="Buy Me Momo">
+  <a href="https://buymemomo.com/amitbaniya" target="_blank" rel="nofollow">
+    <img src="src-tauri/icons/momo_small.png" alt="Momo" width="20" height="20" style="vertical-align:middle;margin-right:8px;">
+    <span style="color:#C25223;font-weight:600;font-size:1.1em;">Buy Me Momo</span>
   </a>
 </div>
 
