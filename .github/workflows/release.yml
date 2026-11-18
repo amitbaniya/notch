@@ -1,0 +1,136 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.1)'
+        required: true
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.set_version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Determine version
+        id: set_version
+        run: |
+          if ("${{ github.event.inputs.version }}" -ne "") {
+            echo "version=${{ github.event.inputs.version }}" >> $env:GITHUB_OUTPUT
+          } else {
+            $tag = "${{ github.ref_name }}"
+            echo "version=${tag.TrimStart('v')}" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Update version in configs (manual dispatch only)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          $ver = "${{ steps.set_version.outputs.version }}"
+          # package.json
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $pkg.version = $ver
+          $pkg | ConvertTo-Json -Depth 10 | Set-Content package.json
+          # tauri.conf.json
+          $tauri = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $tauri.version = $ver
+          $tauri | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.conf.json
+
+      - name: Build Tauri app (NSIS)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v${{ steps.set_version.outputs.version }}
+          releaseName: "Notch v${{ steps.set_version.outputs.version }}"
+          releaseBody: |
+            ## Notch v${{ steps.set_version.outputs.version }}
+            See [CHANGELOG](https://github.com/amitbaniya/notch/blob/main/CHANGELOG.md) for details.
+          releaseDraft: false
+          releasePrerelease: false
+          args: --bundles nsis
+
+      - name: Upload NSIS installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: notch-installer-${{ steps.set_version.outputs.version }}
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          retention-days: 30
+
+  # Optional: Create MSIX for Microsoft Store (run separately)
+  msix:
+    name: Build MSIX (for Microsoft Store)
+    needs: build
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.create_msix == 'true' }}
+    runs-on: windows-latest
+    steps:
+      - name: Download NSIS installer
+        uses: actions/download-artifact@v4
+        with:
+          name: notch-installer-${{ needs.build.outputs.version }}
+          path: installer
+
+      - name: Create MSIX using MSIX Packaging Tool
+        run: |
+          # This requires MSIX Packaging Tool and a code signing certificate
+          # For now, this is a placeholder - you'll need to run MSIX Packaging Tool manually
+          echo "MSIX creation requires manual steps:"
+          echo "1. Install 'MSIX Packaging Tool' from Microsoft Store"
+          echo "2. Run it -> Create package from installer"
+          echo "3. Select installer/*.exe"
+          echo "4. Sign with your Partner Center certificate"
+          echo "5. Submit to Partner Center"
+          Write-Output "MANUAL_STEP_REQUIRED=1" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+  # Summary
+  done:
+    name: Done
+    needs: [build, msix]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "✅ Build complete!"
+          echo "Version: ${{ needs.build.outputs.version }}"
+          echo "Tag: v${{ needs.build.outputs.version }}"
+          echo "Release: https://github.com/amitbaniya/notch/releases/tag/v${{ needs.build.outputs.version }}"
+          if ("${{ needs.mix.outputs.MANUAL_STEP_REQUIRED }}" -eq "1") {
+            echo "📦 MSIX: Manual step required (see MSIX job logs)"
+          }
