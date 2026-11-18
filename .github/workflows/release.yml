@@ -131,6 +131,6 @@ jobs:
           echo "Version: ${{ needs.build.outputs.version }}"
           echo "Tag: v${{ needs.build.outputs.version }}"
           echo "Release: https://github.com/amitbaniya/notch/releases/tag/v${{ needs.build.outputs.version }}"
-          if ("${{ needs.mix.outputs.MANUAL_STEP_REQUIRED }}" -eq "1") {
+          if [ "${{ needs.msix.outputs.MANUAL_STEP_REQUIRED }}" = "1" ]; then
             echo "📦 MSIX: Manual step required (see MSIX job logs)"
-          }
+          fi
