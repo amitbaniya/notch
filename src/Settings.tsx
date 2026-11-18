@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { isEnabled, enable, disable } from "@tauri-apps/plugin-autostart";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/api/shell";
 import type { Cfg } from "./types";
 
 function Seg<T extends string>({ v, opts, set }: { v: T; opts: [T, string][]; set: (v: T) => void }) {
@@ -114,14 +115,14 @@ export function Settings({ cfg, set, enabled, setEnabled, onTestPeek }: { cfg: C
       <div className="sh" style={{ marginTop: 16 }}>SUPPORT</div>
       <Row title="Support the developer" desc="If you enjoy Notch, consider supporting development.">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <a href="https://buymemomo.com/amitbaniya" target="_blank" rel="noopener noreferrer" className="pill2" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <button className="pill2" style={{ display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => open("https://buymemomo.com/amitbaniya")}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
             Buy Me Momo
-          </a>
-          <a href="https://github.com/amitbaniya/notch" target="_blank" rel="noopener noreferrer" className="pill2" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, background: "#24292e", color: "#fff" }}>
+          </button>
+          <button className="pill2" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#24292e", color: "#fff" }} onClick={() => open("https://github.com/amitbaniya/notch")}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.37 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.855 1.23 1.92 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
             GitHub
-          </a>
+          </button>
         </div>
       </Row>
     </div>
